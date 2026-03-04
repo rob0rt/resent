@@ -293,7 +293,7 @@ fn gen_edge_query_methods(
         .iter()
         .map(|edge| match edge {
             EntSchemaEdge::To { entity, on, from_field } => {
-                let method_name = query_fn_name(&entity.segments.last().unwrap().ident);
+                let method_name = query_fn_name(entity);
                 let where_fn = format_ident!("where_{}", on);
                 let from_field = format_ident!("{}", from_field);
 
@@ -305,7 +305,7 @@ fn gen_edge_query_methods(
                 }
             }
             EntSchemaEdge::From { entity, on, to_field } => {
-                let method_name = query_fn_name(&entity.segments.last().unwrap().ident);
+                let method_name = query_fn_name(entity);
                 let where_fn = format_ident!("where_{}", on);
                 let to_field = format_ident!("{}", to_field);
 
@@ -327,12 +327,8 @@ fn gen_edge_ent_query_methods(
     edges
         .iter()
         .map(|edge| match edge {
-            EntSchemaEdge::To {
-                entity,
-                on,
-                from_field,
-            } => {
-                let method_name = query_fn_name(&entity.segments.last().unwrap().ident);
+            EntSchemaEdge::To { entity, on, from_field } => {
+                let method_name = query_fn_name(entity);
                 let where_fn = format_ident!("where_{}", on);
                 let from_field = format_ident!("{}", from_field);
                 
@@ -351,12 +347,8 @@ fn gen_edge_ent_query_methods(
 
                 (trait_method, impl_method)
             }
-            EntSchemaEdge::From {
-                entity,
-                on,
-                to_field,
-            } => {
-                let method_name = query_fn_name(&entity.segments.last().unwrap().ident);
+            EntSchemaEdge::From { entity, on, to_field } => {
+                let method_name = query_fn_name(entity);
                 let where_fn = format_ident!("where_{}", on);
                 let to_field = format_ident!("{}", to_field);
 
@@ -376,17 +368,21 @@ fn gen_edge_ent_query_methods(
                 (trait_method, impl_method)
             }
         })
-        // .map(|(a, b)| (a, b))
         .unzip()
-    // .collect()
 }
 
-fn query_fn_name(ident: &syn::Ident) -> proc_macro2::Ident {
+/// Converts an entity type path (e.g. `EntBar`) into a query method name (e.g. `query_bar`).
+fn query_fn_name(path: &syn::Path) -> proc_macro2::Ident {
     format_ident!(
         "query_{}",
-        ident
+            path
+            .segments
+            .last()
+            .unwrap()
+            .ident
             .to_string()
             .to_case(Case::Snake)
             .trim_start_matches("ent_")
     )
 }
+
