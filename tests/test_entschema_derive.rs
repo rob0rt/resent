@@ -9,14 +9,15 @@ type Ctx = ();
 
 #[derive(EntSchema)]
 #[entschema(table = "foo", ctx = Ctx)]
-#[edge(from = EntFoo, on = "bar_id", to = "id")]
+#[edge(to = EntBar, on = "id", from = "bar_id")]
 #[allow(dead_code)]
-pub struct EntBar {
+pub struct EntFoo {
     id: Uuid,
-    value: String,
+    name: String,
+    bar_id: Uuid,
 }
 
-impl<'ctx> EntPrivacyPolicy<'ctx, Ctx> for EntBar {
+impl<'ctx> EntPrivacyPolicy<'ctx, Ctx> for EntFoo {
     fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, Ctx, Self>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
@@ -28,15 +29,14 @@ impl<'ctx> EntPrivacyPolicy<'ctx, Ctx> for EntBar {
 
 #[derive(EntSchema)]
 #[entschema(table = "foo", ctx = Ctx)]
-#[edge(to = EntBar, on = "id", from = "bar_id")]
+#[edge(from = EntFoo, on = "bar_id", to = "id")]
 #[allow(dead_code)]
-pub struct EntFoo {
+pub struct EntBar {
     id: Uuid,
-    name: String,
-    bar_id: Uuid,
+    value: String,
 }
 
-impl<'ctx> EntPrivacyPolicy<'ctx, Ctx> for EntFoo {
+impl<'ctx> EntPrivacyPolicy<'ctx, Ctx> for EntBar {
     fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, Ctx, Self>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
@@ -56,6 +56,6 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
 
     assert_eq!(
         f.to_string(sea_query::PostgresQueryBuilder),
-        "SELECT * FROM \"foo\" WHERE \"id\" IN (SELECT \"bar_id\" FROM \"foo\" WHERE \"id\" = 1 AND \"name\" = 'Test')"
+        "SELECT * FROM \"bar\" WHERE \"id\" IN (SELECT \"bar_id\" FROM \"foo\" WHERE \"name\" = 'Test')"
     );
 }
