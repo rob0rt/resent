@@ -1,6 +1,6 @@
 use crate::{
     Ent,
-    predicate::{EntField, EntFieldPredicate},
+    field::{EntField, EntFieldPredicate},
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
 };
 use sea_query::SelectStatement;

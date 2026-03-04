@@ -208,7 +208,7 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
             #(#edge_ent_query_trait_methods)*
         }
 
-        impl<'ctx> #query_trait_name<'ctx> for resent::EntQuery<'ctx, #ctx_type, #name> {
+        impl<'ctx> #query_trait_name<'ctx> for resent::query::EntQuery<'ctx, #ctx_type, #name> {
             #(#field_filter_impl_methods)*
             #(#edge_ent_query_impl_methods)*
         }
@@ -245,7 +245,7 @@ fn gen_field_structs(
             quote! {
                 pub struct #struct_name;
 
-                impl<'ctx> resent::EntField<'ctx, #ctx_type, #name> for #struct_name {
+                impl<'ctx> resent::field::EntField<'ctx, #ctx_type, #name> for #struct_name {
                     const NAME: &'static str = #field_name;
                     type Value = #field_type;
                 }
@@ -269,13 +269,13 @@ fn gen_field_filter_methods(
             let field_type = &field.ty;
 
             let trait_method = quote! {
-                fn #filter_name(self, predicate: resent::QueryPredicate<#field_type>) -> resent::EntQuery<'ctx, #ctx_type, #name>;
+                fn #filter_name(self, predicate: resent::predicate::QueryPredicate<#field_type>) -> resent::query::EntQuery<'ctx, #ctx_type, #name>;
             };
 
             let impl_method = quote! {
-                fn #filter_name(self, predicate: resent::QueryPredicate<#field_type>) -> resent::EntQuery<'ctx, #ctx_type, #name> {
+                fn #filter_name(self, predicate: resent::predicate::QueryPredicate<#field_type>) -> resent::query::EntQuery<'ctx, #ctx_type, #name> {
                     self.filter(
-                        <#mod_name::fields::#struct_name as resent::EntField<'ctx, #ctx_type, #name>>::predicate(predicate)
+                        <#mod_name::fields::#struct_name as resent::field::EntField<'ctx, #ctx_type, #name>>::predicate(predicate)
                     )
                 }
             };
@@ -298,9 +298,9 @@ fn gen_edge_query_methods(
                 let from_field = format_ident!("{}", from_field);
 
                 quote! {
-                    pub fn #method_name<'ctx>(&self, ctx: &'ctx resent::QueryContext<#ctx_type>) -> resent::EntQuery<'ctx, #ctx_type, #entity> {
-                        use resent::{Ent, EntQuery};
-                        #entity::query(ctx).#where_fn(resent::QueryPredicate::Equals(self.#from_field))
+                    pub fn #method_name<'ctx>(&self, ctx: &'ctx resent::query::QueryContext<#ctx_type>) -> resent::query::EntQuery<'ctx, #ctx_type, #entity> {
+                        use resent::{Ent, query::EntQuery};
+                        #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::Equals(self.#from_field))
                     }
                 }
             }
@@ -310,9 +310,9 @@ fn gen_edge_query_methods(
                 let to_field = format_ident!("{}", to_field);
 
                 quote! {
-                    pub fn #method_name<'ctx>(&self, ctx: &'ctx resent::QueryContext<#ctx_type>) -> resent::EntQuery<'ctx, #ctx_type, #entity> {
-                        use resent::{Ent, EntQuery};
-                        #entity::query(ctx).#where_fn(resent::QueryPredicate::Equals(self.#to_field))
+                    pub fn #method_name<'ctx>(&self, ctx: &'ctx resent::query::QueryContext<#ctx_type>) -> resent::query::EntQuery<'ctx, #ctx_type, #entity> {
+                        use resent::{Ent, query::EntQuery};
+                        #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::Equals(self.#to_field))
                     }
                 }
             }
@@ -337,15 +337,15 @@ fn gen_edge_ent_query_methods(
                 let from_field = format_ident!("{}", from_field);
                 
                 let trait_method = quote! {
-                    fn #method_name(self) -> resent::EntQuery<'ctx, #ctx_type, #entity>;
+                    fn #method_name(self) -> resent::query::EntQuery<'ctx, #ctx_type, #entity>;
                 };
                 
                 let impl_method = quote! {
-                    fn #method_name(self) -> resent::EntQuery<'ctx, #ctx_type, #entity> {
-                        let (ctx, mut subquery): (&'ctx resent::QueryContext<#ctx_type>, sea_query::SelectStatement) = self.into();
+                    fn #method_name(self) -> resent::query::EntQuery<'ctx, #ctx_type, #entity> {
+                        let (ctx, mut subquery): (&'ctx resent::query::QueryContext<#ctx_type>, sea_query::SelectStatement) = self.into();
                         subquery.clear_selects().column(stringify!(#from_field));
-                        use resent::{Ent, EntQuery};
-                        #entity::query(ctx).#where_fn(resent::QueryPredicate::InSubquery(subquery))
+                        use resent::{Ent, query::EntQuery};
+                        #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::InSubquery(subquery))
                     }
                 };
 
@@ -361,15 +361,15 @@ fn gen_edge_ent_query_methods(
                 let to_field = format_ident!("{}", to_field);
 
                 let trait_method = quote! {
-                    fn #method_name(self) -> resent::EntQuery<'ctx, #ctx_type, #entity>;
+                    fn #method_name(self) -> resent::query::EntQuery<'ctx, #ctx_type, #entity>;
                 };
 
                 let impl_method = quote! {
-                    fn #method_name(self) -> resent::EntQuery<'ctx, #ctx_type, #entity> {
-                        let (ctx, mut subquery): (&'ctx resent::QueryContext<#ctx_type>, sea_query::SelectStatement) = self.into();
+                    fn #method_name(self) -> resent::query::EntQuery<'ctx, #ctx_type, #entity> {
+                        let (ctx, mut subquery): (&'ctx resent::query::QueryContext<#ctx_type>, sea_query::SelectStatement) = self.into();
                         subquery.clear_selects().column(stringify!(#to_field));
-                        use resent::{Ent, EntQuery};
-                        #entity::query(ctx).#where_fn(resent::QueryPredicate::InSubquery(subquery))
+                        use resent::{Ent, query::EntQuery};
+                        #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::InSubquery(subquery))
                     }
                 };
                 

@@ -1,14 +1,12 @@
-mod predicate;
-mod privacy;
-mod query;
+pub mod field;
+pub mod predicate;
+pub mod privacy;
+pub mod query;
 
-pub use predicate::{EntField, EntFieldPredicate, QueryPredicate};
-pub use privacy::{
-    AlwaysAllowRule, AlwaysDenyRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntPrivacyRule,
-    EntQueryPrivacyRule, PrivacyRuleOutcome,
-};
-pub use query::{EntQuery, QueryContext};
 pub use resent_macros::EntSchema;
+
+use privacy::EntPrivacyPolicy;
+use query::{EntQuery, QueryContext};
 
 pub trait Ent<'ctx, Ctx: 'ctx + Sync = ()>: Sized + From<sqlx::postgres::PgRow> {
     const TABLE_NAME: &'static str;

@@ -1,6 +1,8 @@
 use resent::{
-    AlwaysAllowRule, Ent, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule, EntSchema,
-    QueryContext, QueryPredicate::Equals,
+    Ent, EntSchema,
+    predicate::QueryPredicate as P,
+    privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
+    query::QueryContext,
 };
 use sea_query::SelectStatement;
 use uuid::Uuid;
@@ -50,7 +52,7 @@ impl<'ctx> EntPrivacyPolicy<'ctx, Ctx> for EntBar {
 fn test_ent_schema_derive(pool: sqlx::PgPool) {
     let ctx = QueryContext::new(pool, ());
     let (_, f): (&QueryContext<()>, SelectStatement) = EntFoo::query(&ctx)
-        .where_name(Equals("Test".to_string()))
+        .where_name(P::Equals("Test".to_string()))
         .query_bar()
         .into();
 
