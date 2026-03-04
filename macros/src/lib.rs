@@ -1,18 +1,58 @@
 use convert_case::{Case, Casing};
-use darling::{FromDeriveInput, FromField, FromMeta, ast::NestedMeta};
+use darling::{FromDeriveInput, FromField, FromMeta, ast::NestedMeta, usage::IdentSet};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::parse_macro_input;
+use syn::{Ident, parse_macro_input};
 
 // ---------------------------------------------------------------------------
 // Attribute parsing
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, FromDeriveInput)]
+#[derive(FromMeta, Debug)]
+#[darling(from_expr = |expr| Ok(EntPrimaryKey::from(expr)))]
+enum EntPrimaryKey {
+    // #[darling(skip)]
+    Single(syn::Path),
+    // #[darling(skip)]
+    Composite(darling::util::PathList),
+}
+
+impl From<&syn::Expr> for EntPrimaryKey {
+    fn from(expr: &syn::Expr) -> Self {
+        match expr {
+            syn::Expr::Path(p) => EntPrimaryKey::Single(p.path.clone()),
+            syn::Expr::Array(a) => {
+                let paths = a.elems.iter().filter_map(|elem| {
+                    if let syn::Expr::Path(p) = elem {
+                        Some(p.path.clone())
+                    } else {
+                        None
+                    }
+                }).collect::<Vec<syn::Path>>();
+
+                if paths.len() != a.elems.len() {
+                    panic!("primary_key array must contain only paths");
+                }
+
+                if paths.len() == 1 {
+                    return EntPrimaryKey::Single(paths.into_iter().next().unwrap());
+                }
+
+                EntPrimaryKey::Composite(paths.into())
+            }
+            _ => panic!("primary_key must be a path or an array of paths"),
+        }
+    }
+}
+
+#[derive(FromDeriveInput, Debug)]
 #[darling(attributes(entschema))]
 struct EntSchemaArgs {
     table: String,
     ctx: syn::Path,
+
+    // Support primary_key = id or primary_key = [id, other_id] (for composite keys)
+    primary_key: Option<EntPrimaryKey>,
 }
 
 /// Parses either:
@@ -174,11 +214,15 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     let ctx_type = &args.ctx;
 
     let field_structs = gen_field_structs(&fields, ctx_type, name);
+
+    let edge_query_methods = gen_edge_query_methods(&edges, ctx_type);
+    let primary_key_loader_method = gen_primary_key_loader_method(&args.primary_key, &fields, ctx_type);
+    
     let (field_filter_trait_methods, field_filter_impl_methods) =
         gen_field_filter_methods(&fields, &mod_name, ctx_type, name);
-    let edge_query_methods = gen_edge_query_methods(&edges, ctx_type);
     let (edge_ent_query_trait_methods, edge_ent_query_impl_methods) =
         gen_edge_ent_query_methods(&edges, ctx_type);
+    
     let field_assignments = fields.iter().map(|field| {
         let ident = field.ident.as_ref().unwrap();
         quote! {
@@ -197,6 +241,7 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
 
         impl #name {
             #(#edge_query_methods)*
+            #primary_key_loader_method
         }
 
         impl<'ctx> resent::Ent<'ctx, #ctx_type> for #name {
@@ -318,6 +363,31 @@ fn gen_edge_query_methods(
             }
         })
         .collect()
+}
+
+fn gen_primary_key_loader_method(
+    primary_key: &Option<EntPrimaryKey>,
+    fields: &[EntStructField],
+    ctx_type: &syn::Path,
+) -> proc_macro2::TokenStream {
+    if let Some(pk) = primary_key {
+        match pk {
+            EntPrimaryKey::Single(field) => {
+                let field_name = format_ident!("{}", field.segments.last().unwrap().ident.to_string());
+                let filter_name = format_ident!("where_{}", field_name);
+                let field_type = fields.iter().find(|f| f.ident.as_ref().unwrap() == &field_name).unwrap().ty.clone();
+                return quote! {
+                    pub async fn load<'ctx>(ctx: &'ctx resent::query::QueryContext<#ctx_type>, #field_name: #field_type) -> Result<Self, resent::query::EntLoadError> {
+                        use resent::{Ent, query::EntQuery};
+                        Self::query(ctx).#filter_name(resent::predicate::QueryPredicate::Equals(#field_name)).load_only().await
+                    }
+                };
+            }
+            _ => {},
+        };
+    }
+    
+    quote! {}
 }
 
 fn gen_edge_ent_query_methods(
