@@ -274,6 +274,7 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
 // Code generation helpers
 // ---------------------------------------------------------------------------
 
+/// EntField impls for each struct field, e.g. `struct Id; impl EntField for Id { ... }`
 fn gen_field_structs(
     fields: &[EntStructField],
     ctx_type: &syn::Path,
@@ -299,6 +300,7 @@ fn gen_field_structs(
         .collect()
 }
 
+/// Generates filter methods for each field, e.g. `where_id(self, predicate) -> EntQuery<...>`
 fn gen_field_filter_methods(
     fields: &[EntStructField],
     mod_name: &proc_macro2::Ident,
@@ -330,6 +332,7 @@ fn gen_field_filter_methods(
         .unzip()
 }
 
+/// Generates query methods for edge entities, e.g. `query_bar(ctx) -> EntQuery<..., BarEnt>`
 fn gen_edge_query_methods(
     edges: &[EntSchemaEdge],
     ctx_type: &syn::Path,
@@ -365,6 +368,7 @@ fn gen_edge_query_methods(
         .collect()
 }
 
+/// Generates a loader method for the primary key, e.g. `load(ctx, id) -> Ent`
 fn gen_primary_key_loader_method(
     primary_key: &Option<EntPrimaryKey>,
     fields: &[EntStructField],
@@ -390,6 +394,7 @@ fn gen_primary_key_loader_method(
     quote! {}
 }
 
+/// Generates query methods for edge entities that return subqueries, e.g. `query_bar() -> EntQuery<..., BarEnt>` where the filter is an IN subquery on the edge field.
 fn gen_edge_ent_query_methods(
     edges: &[EntSchemaEdge],
     ctx_type: &syn::Path,
