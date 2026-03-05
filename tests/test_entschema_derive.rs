@@ -60,6 +60,8 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
         .await
         .expect("Failed to load EntFoo");
 
+    ent_foo::fields::BarId;
+
     assert_eq!(
         f.to_string(sea_query::PostgresQueryBuilder),
         "SELECT * FROM \"bar\" WHERE \"id\" IN (SELECT \"bar_id\" FROM \"foo\" WHERE \"name\" = 'Test')"
