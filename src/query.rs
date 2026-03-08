@@ -39,9 +39,7 @@ pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>> {
     _marker: std::marker::PhantomData<TEnt>,
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx> + EntPrivacyPolicy<'ctx, Ctx>>
-    EntQuery<'ctx, Ctx, TEnt>
-{
+impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>> EntQuery<'ctx, Ctx, TEnt> {
     pub fn new(ctx: &'ctx QueryContext<Ctx>) -> Self {
         Self {
             field_queries: Vec::new(),
@@ -65,7 +63,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx> + EntPrivacyPolicy<'ctx, Ctx>>
     }
 
     pub async fn load(self) -> Result<Vec<TEnt>, EntLoadError> {
-        let query_policy = <TEnt as EntPrivacyPolicy<'ctx, Ctx>>::query_policy();
+        let query_policy = TEnt::query_policy();
 
         let (ctx, select): (&QueryContext<Ctx>, SelectStatement) = self.into();
         let select_statement = select.to_string(sea_query::PostgresQueryBuilder);
