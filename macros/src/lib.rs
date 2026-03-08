@@ -210,10 +210,19 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     let name = &input.ident;
     let mod_name = format_ident!("{}", name.to_string().to_case(Case::Snake));
     let query_trait_name = format_ident!("{}Query", name);
+    let mutator_name = format_ident!("{}Mutation", name);
     let table_str = &args.table;
     let ctx_type = &args.ctx;
 
-    let field_structs = gen_field_structs(&fields, ctx_type, name);
+    let field_structs = gen_field_structs(&fields, ctx_type, name, &mutator_name);
+
+    let mutator_fields = fields.iter().map(|field| {
+        let ident = field.ident.as_ref().unwrap();
+        let field_struct_name = format_ident!("{}", ident.to_string().to_case(Case::Pascal));
+        quote! {
+            #ident: resent::mutator::EntMutationFieldState<'ctx, #ctx_type, #name, #mod_name::fields::#field_struct_name>
+        }
+    });
 
     let edge_query_methods = gen_edge_query_methods(&edges, ctx_type);
     let primary_key_loader_method = gen_primary_key_loader_method(&args.primary_key, &fields, ctx_type);
@@ -248,6 +257,17 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
             const TABLE_NAME: &'static str = #table_str;
         }
 
+        struct #mutator_name<'ctx> {
+            ent: #name,
+            #(#mutator_fields),*
+        }
+
+        impl<'ctx> resent::mutator::EntMutator<'ctx, #ctx_type, #name> for #mutator_name<'ctx> {
+            fn get_ent(&self) -> &#name {
+                &self.ent
+            }
+        }
+
         pub trait #query_trait_name<'ctx> {
             #(#field_filter_trait_methods)*
             #(#edge_ent_query_trait_methods)*
@@ -279,6 +299,7 @@ fn gen_field_structs(
     fields: &[EntStructField],
     ctx_type: &syn::Path,
     name: &syn::Ident,
+    mutator_name: &syn::Ident,
 ) -> Vec<proc_macro2::TokenStream> {
     fields
         .iter()
@@ -294,6 +315,12 @@ fn gen_field_structs(
                 impl<'ctx> resent::field::EntField<'ctx, #ctx_type, #name> for #struct_name {
                     const NAME: &'static str = #field_name;
                     type Value = #field_type;
+                }
+
+                impl<'ctx> resent::field::EntFieldSetter<'ctx, #ctx_type, #name, #mutator_name<'ctx>> for #struct_name {
+                    fn set(target: &mut #mutator_name<'ctx>, new_value: Self::Value) {
+                        target.#ident = resent::mutator::EntMutationFieldState::Set(Box::new(new_value));
+                    }
                 }
             }
         })

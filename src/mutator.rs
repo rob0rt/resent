@@ -1,42 +1,57 @@
-use std::collections::{BTreeMap, HashMap};
+use crate::{
+    Ent,
+    field::{EntField, EntFieldGetter, EntFieldSetter},
+};
 
-use crate::{Ent, field::EntField, query::QueryContext};
+pub enum EntMutationFieldState<
+    'ctx,
+    Ctx: 'ctx + Sync,
+    TEnt: Ent<'ctx, Ctx>,
+    TField: EntField<'ctx, Ctx, TEnt>,
+> {
+    /// The field is not being mutated.
+    Unset,
 
-struct EntMutator<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>> {
-    entity: TEnt,
-    mutations: HashMap<String, Box<dyn std::any::Any>>,
-    _marker: std::marker::PhantomData<&'ctx Ctx>,
+    /// The field is being mutated to a new value.
+    Set(Box<TField::Value>),
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>> EntMutator<'ctx, Ctx, TEnt> {
-    fn new(entity: TEnt) -> Self {
-        Self {
-            entity,
-            mutations: HashMap::new(),
-            _marker: std::marker::PhantomData,
+/// Represents a reference to a field mutation, allowing us to track the old and new values of the field.
+pub struct EntMutationField<
+    'a,
+    'ctx,
+    Ctx: 'ctx + Sync,
+    TEnt: Ent<'ctx, Ctx>,
+    TField: EntField<'ctx, Ctx, TEnt>,
+> {
+    old: &'a TField::Value,
+    new: &'a EntMutationFieldState<'ctx, Ctx, TEnt, TField>,
+}
+
+pub trait EntMutator<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>>
+where
+    Self: Sized,
+{
+    fn set<TField: EntField<'ctx, Ctx, TEnt>>(&mut self, new_value: TField::Value)
+    where
+        TField: EntFieldSetter<'ctx, Ctx, TEnt, Self>,
+    {
+        TField::set(self, new_value);
+    }
+
+    fn get<'a, TField: EntField<'ctx, Ctx, TEnt>>(
+        &'a self,
+    ) -> EntMutationField<'a, 'ctx, Ctx, TEnt, TField>
+    where
+        TField: EntFieldGetter<'ctx, Ctx, TEnt, TEnt, <TField as EntField<'ctx, Ctx, TEnt>>::Value>,
+        TField:
+            EntFieldGetter<'ctx, Ctx, TEnt, Self, EntMutationFieldState<'ctx, Ctx, TEnt, TField>>,
+    {
+        EntMutationField {
+            old: TField::get(self.get_ent()),
+            new: TField::get(self),
         }
     }
 
-    fn set<TField>(&mut self, new_value: TField::Value)
-    where
-        TField: EntField<'ctx, Ctx, TEnt> + 'static,
-    {
-        self.mutations
-            .insert(TField::NAME.to_string(), Box::new(new_value));
-    }
-
-    fn get<TField>(&self) -> Option<&TField::Value>
-    where
-        TField: EntField<'ctx, Ctx, TEnt> + 'static,
-    {
-        self.mutations
-            .get(TField::NAME)
-            .and_then(|mutation| mutation.downcast_ref::<TField::Value>())
-    }
-
-    fn apply(self, context: &'ctx QueryContext<Ctx>) -> TEnt {
-        // Here we would apply the mutations to the entity and save it to the database.
-        // This is a placeholder implementation.
-        self.entity
-    }
+    fn get_ent(&self) -> &TEnt;
 }

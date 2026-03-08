@@ -57,12 +57,7 @@ impl<'ctx, Ctx: 'ctx + Sync> EntPrivacyRule<'ctx, Ctx> for AlwaysDenyRule {
     }
 }
 
-pub trait EntPrivacyPolicy<'ctx, Ctx: 'ctx + Sync = ()>
-where
-    Self: Ent<'ctx, Ctx>,
-{
-    // type Ent: Ent<'ctx, Ctx>;
-
+pub trait EntPrivacyPolicy<'ctx, Ctx: 'ctx + Sync> {
     fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, Ctx, Self>>>;
     fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, Ctx, Self>>>;
 }

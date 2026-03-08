@@ -1,5 +1,7 @@
 use resent::{
     Ent, EntSchema,
+    field::{EntField, EntFieldGetter, EntFieldSetter},
+    mutator::{EntMutationField, EntMutationFieldState, EntMutator},
     predicate::QueryPredicate as P,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
     query::QueryContext,
@@ -7,10 +9,10 @@ use resent::{
 use sea_query::SelectStatement;
 use uuid::Uuid;
 
-type Ctx = ();
+type EntCtx = ();
 
 #[derive(EntSchema)]
-#[entschema(table = "foo", ctx = Ctx, primary_key = id)]
+#[entschema(table = "foo", ctx = EntCtx, primary_key = id)]
 #[edge(to = EntBar, on = "id", from = "bar_id")]
 #[allow(dead_code)]
 pub struct EntFoo {
@@ -19,18 +21,18 @@ pub struct EntFoo {
     bar_id: Uuid,
 }
 
-impl<'ctx> EntPrivacyPolicy<'ctx, Ctx> for EntFoo {
-    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, Ctx, Self>>> {
+impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntFoo {
+    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, EntCtx, Self>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 
-    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, Ctx, Self>>> {
+    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, EntCtx, Self>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 }
 
 #[derive(EntSchema)]
-#[entschema(table = "foo", ctx = Ctx)]
+#[entschema(table = "foo", ctx = EntCtx, primary_key = id)]
 #[edge(from = EntFoo, on = "bar_id", to = "id")]
 #[allow(dead_code)]
 pub struct EntBar {
@@ -38,12 +40,12 @@ pub struct EntBar {
     value: String,
 }
 
-impl<'ctx> EntPrivacyPolicy<'ctx, Ctx> for EntBar {
-    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, Ctx, Self>>> {
+impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBar {
+    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, EntCtx, Self>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 
-    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, Ctx, Self>>> {
+    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, EntCtx, Self>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 }
@@ -56,11 +58,17 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
         .query_bar()
         .into();
 
-    EntFoo::load(&ctx, Uuid::new_v4())
+    let bar = EntBar::load(&ctx, Uuid::new_v4())
         .await
         .expect("Failed to load EntFoo");
 
-    ent_foo::fields::BarId;
+    let mut mutator = EntBarMutation {
+        ent: bar,
+        id: EntMutationFieldState::Unset,
+        value: EntMutationFieldState::Unset,
+    };
+
+    mutator.set::<ent_bar::fields::Value>("New Value".to_string());
 
     assert_eq!(
         f.to_string(sea_query::PostgresQueryBuilder),

@@ -30,3 +30,19 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>, TField: EntField<'ctx, Ctx, T
         self.predicate.to_expr(TField::NAME)
     }
 }
+
+/// A trait for getting the value of a field from an entity, used in both query predicates and mutation tracking.
+pub trait EntFieldGetter<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>, T, TOut>
+where
+    Self: EntField<'ctx, Ctx, TEnt>,
+{
+    fn get(target: &T) -> &TOut;
+}
+
+/// A trait for setting the value of a field on an entity, used in mutation tracking.
+pub trait EntFieldSetter<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>, T>
+where
+    Self: EntField<'ctx, Ctx, TEnt>,
+{
+    fn set(target: &mut T, new_value: Self::Value);
+}

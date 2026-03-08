@@ -9,13 +9,12 @@ pub use resent_macros::EntSchema;
 use privacy::EntPrivacyPolicy;
 use query::{EntQuery, QueryContext};
 
-pub trait Ent<'ctx, Ctx: 'ctx + Sync = ()>: Sized + From<sqlx::postgres::PgRow> {
+pub trait Ent<'ctx, Ctx: 'ctx + Sync>:
+    Sized + From<sqlx::postgres::PgRow> + EntPrivacyPolicy<'ctx, Ctx>
+{
     const TABLE_NAME: &'static str;
 
-    fn query(context: &'ctx QueryContext<Ctx>) -> EntQuery<'ctx, Ctx, Self>
-    where
-        Self: EntPrivacyPolicy<'ctx, Ctx>,
-    {
+    fn query(context: &'ctx QueryContext<Ctx>) -> EntQuery<'ctx, Ctx, Self> {
         EntQuery::new(context)
     }
 }
