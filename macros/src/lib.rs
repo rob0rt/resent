@@ -49,8 +49,6 @@ impl From<&syn::Expr> for EntPrimaryKey {
 #[darling(attributes(entschema))]
 struct EntSchemaArgs {
     table: String,
-    ctx: syn::Path,
-
     // Support primary_key = id or primary_key = [id, other_id] (for composite keys)
     primary_key: Option<EntPrimaryKey>,
 }
@@ -212,25 +210,24 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     let query_trait_name = format_ident!("{}Query", name);
     let mutator_name = format_ident!("{}Mutation", name);
     let table_str = &args.table;
-    let ctx_type = &args.ctx;
 
-    let field_structs = gen_field_structs(&fields, ctx_type, name, &mutator_name);
+    let field_structs = gen_field_structs(&fields, name, &mutator_name);
 
     let mutator_fields = fields.iter().map(|field| {
         let ident = field.ident.as_ref().unwrap();
         let field_struct_name = format_ident!("{}", ident.to_string().to_case(Case::Pascal));
         quote! {
-            #ident: resent::mutator::EntMutationFieldState<'ctx, #ctx_type, #name, #mod_name::fields::#field_struct_name>
+            #ident: resent::mutator::EntMutationFieldState<#name, #mod_name::fields::#field_struct_name>
         }
     });
 
-    let edge_query_methods = gen_edge_query_methods(&edges, ctx_type);
-    let primary_key_loader_method = gen_primary_key_loader_method(&args.primary_key, &fields, ctx_type);
+    let edge_query_methods = gen_edge_query_methods(&edges);
+    let primary_key_loader_method = gen_primary_key_loader_method(&args.primary_key, &fields);
     
     let (field_filter_trait_methods, field_filter_impl_methods) =
-        gen_field_filter_methods(&fields, &mod_name, ctx_type, name);
+        gen_field_filter_methods(&fields, &mod_name, name);
     let (edge_ent_query_trait_methods, edge_ent_query_impl_methods) =
-        gen_edge_ent_query_methods(&edges, ctx_type);
+        gen_edge_ent_query_methods(&edges);
     
     let field_assignments = fields.iter().map(|field| {
         let ident = field.ident.as_ref().unwrap();
@@ -253,27 +250,35 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
             #primary_key_loader_method
         }
 
-        impl<'ctx> resent::Ent<'ctx, #ctx_type> for #name {
+        impl resent::Ent for #name {
             const TABLE_NAME: &'static str = #table_str;
         }
 
-        struct #mutator_name<'ctx> {
+        struct #mutator_name {
             ent: #name,
             #(#mutator_fields),*
         }
 
-        impl<'ctx> resent::mutator::EntMutator<'ctx, #ctx_type, #name> for #mutator_name<'ctx> {
+        impl<'ctx, Ctx: 'ctx + Sync> resent::mutator::EntMutator<'ctx, Ctx, #name>
+        for #mutator_name
+        where
+            #name: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
+        {
             fn get_ent(&self) -> &#name {
                 &self.ent
             }
         }
 
-        pub trait #query_trait_name<'ctx> {
+        pub trait #query_trait_name<'ctx, Ctx: 'ctx + Sync> {
             #(#field_filter_trait_methods)*
             #(#edge_ent_query_trait_methods)*
         }
 
-        impl<'ctx> #query_trait_name<'ctx> for resent::query::EntQuery<'ctx, #ctx_type, #name> {
+        impl<'ctx, Ctx: 'ctx + Sync> #query_trait_name<'ctx, Ctx>
+        for resent::query::EntQuery<'ctx, Ctx, #name>
+        where
+            #name: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
+        {
             #(#field_filter_impl_methods)*
             #(#edge_ent_query_impl_methods)*
         }
@@ -297,7 +302,6 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
 /// EntField impls for each struct field, e.g. `struct Id; impl EntField for Id { ... }`
 fn gen_field_structs(
     fields: &[EntStructField],
-    ctx_type: &syn::Path,
     name: &syn::Ident,
     mutator_name: &syn::Ident,
 ) -> Vec<proc_macro2::TokenStream> {
@@ -312,13 +316,13 @@ fn gen_field_structs(
             quote! {
                 pub struct #struct_name;
 
-                impl<'ctx> resent::field::EntField<'ctx, #ctx_type, #name> for #struct_name {
+                impl resent::field::EntField<#name> for #struct_name {
                     const NAME: &'static str = #field_name;
                     type Value = #field_type;
                 }
 
-                impl<'ctx> resent::field::EntFieldSetter<'ctx, #ctx_type, #name, #mutator_name<'ctx>> for #struct_name {
-                    fn set(target: &mut #mutator_name<'ctx>, new_value: Self::Value) {
+                impl resent::field::EntFieldSetter<#name, #mutator_name> for #struct_name {
+                    fn set(target: &mut #mutator_name, new_value: Self::Value) {
                         target.#ident = resent::mutator::EntMutationFieldState::Set(Box::new(new_value));
                     }
                 }
@@ -331,7 +335,6 @@ fn gen_field_structs(
 fn gen_field_filter_methods(
     fields: &[EntStructField],
     mod_name: &proc_macro2::Ident,
-    ctx_type: &syn::Path,
     name: &syn::Ident,
 ) -> (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) {
     fields
@@ -343,13 +346,19 @@ fn gen_field_filter_methods(
             let field_type = &field.ty;
 
             let trait_method = quote! {
-                fn #filter_name(self, predicate: resent::predicate::QueryPredicate<#field_type>) -> resent::query::EntQuery<'ctx, #ctx_type, #name>;
+                fn #filter_name(
+                    self,
+                    predicate: resent::predicate::QueryPredicate<#field_type>,
+                ) -> resent::query::EntQuery<'ctx, Ctx, #name>;
             };
 
             let impl_method = quote! {
-                fn #filter_name(self, predicate: resent::predicate::QueryPredicate<#field_type>) -> resent::query::EntQuery<'ctx, #ctx_type, #name> {
+                fn #filter_name(
+                    self, predicate:
+                    resent::predicate::QueryPredicate<#field_type>,
+                ) -> resent::query::EntQuery<'ctx, Ctx, #name> {
                     self.filter(
-                        <#mod_name::fields::#struct_name as resent::field::EntField<'ctx, #ctx_type, #name>>::predicate(predicate)
+                        <#mod_name::fields::#struct_name as resent::field::EntField<#name>>::predicate(predicate)
                     )
                 }
             };
@@ -362,7 +371,6 @@ fn gen_field_filter_methods(
 /// Generates query methods for edge entities, e.g. `query_bar(ctx) -> EntQuery<..., BarEnt>`
 fn gen_edge_query_methods(
     edges: &[EntSchemaEdge],
-    ctx_type: &syn::Path,
 ) -> Vec<proc_macro2::TokenStream> {
     edges
         .iter()
@@ -373,7 +381,13 @@ fn gen_edge_query_methods(
                 let from_field = format_ident!("{}", from_field);
 
                 quote! {
-                    pub fn #method_name<'ctx>(&self, ctx: &'ctx resent::query::QueryContext<#ctx_type>) -> resent::query::EntQuery<'ctx, #ctx_type, #entity> {
+                    pub fn #method_name<'ctx, Ctx: 'ctx + Sync>(
+                        &self,
+                        ctx: &'ctx resent::query::QueryContext<Ctx>,
+                    ) -> resent::query::EntQuery<'ctx, Ctx, #entity>
+                    where
+                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>    
+                    {
                         use resent::{Ent, query::EntQuery};
                         #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::Equals(self.#from_field))
                     }
@@ -385,7 +399,13 @@ fn gen_edge_query_methods(
                 let to_field = format_ident!("{}", to_field);
 
                 quote! {
-                    pub fn #method_name<'ctx>(&self, ctx: &'ctx resent::query::QueryContext<#ctx_type>) -> resent::query::EntQuery<'ctx, #ctx_type, #entity> {
+                    pub fn #method_name<'ctx, Ctx: 'ctx + Sync>(
+                        &self,
+                        ctx: &'ctx resent::query::QueryContext<Ctx>,
+                    ) -> resent::query::EntQuery<'ctx, Ctx, #entity>
+                    where
+                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
+                    {
                         use resent::{Ent, query::EntQuery};
                         #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::Equals(self.#to_field))
                     }
@@ -399,7 +419,6 @@ fn gen_edge_query_methods(
 fn gen_primary_key_loader_method(
     primary_key: &Option<EntPrimaryKey>,
     fields: &[EntStructField],
-    ctx_type: &syn::Path,
 ) -> proc_macro2::TokenStream {
     if let Some(pk) = primary_key {
         match pk {
@@ -408,7 +427,13 @@ fn gen_primary_key_loader_method(
                 let filter_name = format_ident!("where_{}", field_name);
                 let field_type = fields.iter().find(|f| f.ident.as_ref().unwrap() == &field_name).unwrap().ty.clone();
                 return quote! {
-                    pub async fn load<'ctx>(ctx: &'ctx resent::query::QueryContext<#ctx_type>, #field_name: #field_type) -> Result<Self, resent::query::EntLoadError> {
+                    pub async fn load<'ctx, Ctx: 'ctx + Sync>(
+                        ctx: &'ctx resent::query::QueryContext<Ctx>,
+                        #field_name: #field_type
+                    ) -> Result<Self, resent::query::EntLoadError> 
+                    where
+                        Self: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
+                    {
                         use resent::{Ent, query::EntQuery};
                         Self::query(ctx).#filter_name(resent::predicate::QueryPredicate::Equals(#field_name)).load_only().await
                     }
@@ -424,7 +449,6 @@ fn gen_primary_key_loader_method(
 /// Generates query methods for edge entities that return subqueries, e.g. `query_bar() -> EntQuery<..., BarEnt>` where the filter is an IN subquery on the edge field.
 fn gen_edge_ent_query_methods(
     edges: &[EntSchemaEdge],
-    ctx_type: &syn::Path,
 ) -> (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) {
     edges
         .iter()
@@ -435,12 +459,17 @@ fn gen_edge_ent_query_methods(
                 let from_field = format_ident!("{}", from_field);
                 
                 let trait_method = quote! {
-                    fn #method_name(self) -> resent::query::EntQuery<'ctx, #ctx_type, #entity>;
+                    fn #method_name(self) -> resent::query::EntQuery<'ctx, Ctx, #entity>
+                    where
+                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>;
                 };
                 
                 let impl_method = quote! {
-                    fn #method_name(self) -> resent::query::EntQuery<'ctx, #ctx_type, #entity> {
-                        let (ctx, mut subquery): (&'ctx resent::query::QueryContext<#ctx_type>, sea_query::SelectStatement) = self.into();
+                    fn #method_name(self) -> resent::query::EntQuery<'ctx, Ctx, #entity>
+                    where
+                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
+                    {
+                        let (ctx, mut subquery): (&'ctx resent::query::QueryContext<Ctx>, sea_query::SelectStatement) = self.into();
                         subquery.clear_selects().column(stringify!(#from_field));
                         use resent::{Ent, query::EntQuery};
                         #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::InSubquery(subquery))
@@ -455,12 +484,17 @@ fn gen_edge_ent_query_methods(
                 let to_field = format_ident!("{}", to_field);
 
                 let trait_method = quote! {
-                    fn #method_name(self) -> resent::query::EntQuery<'ctx, #ctx_type, #entity>;
+                    fn #method_name(self) -> resent::query::EntQuery<'ctx, Ctx, #entity>
+                    where
+                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>;
                 };
 
                 let impl_method = quote! {
-                    fn #method_name(self) -> resent::query::EntQuery<'ctx, #ctx_type, #entity> {
-                        let (ctx, mut subquery): (&'ctx resent::query::QueryContext<#ctx_type>, sea_query::SelectStatement) = self.into();
+                    fn #method_name(self) -> resent::query::EntQuery<'ctx, Ctx, #entity>
+                    where
+                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
+                    {
+                        let (ctx, mut subquery): (&'ctx resent::query::QueryContext<Ctx>, sea_query::SelectStatement) = self.into();
                         subquery.clear_selects().column(stringify!(#to_field));
                         use resent::{Ent, query::EntQuery};
                         #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::InSubquery(subquery))

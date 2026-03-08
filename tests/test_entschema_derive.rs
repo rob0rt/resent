@@ -12,7 +12,7 @@ use uuid::Uuid;
 type EntCtx = ();
 
 #[derive(EntSchema)]
-#[entschema(table = "foo", ctx = EntCtx, primary_key = id)]
+#[entschema(table = "foo", primary_key = id)]
 #[edge(to = EntBar, on = "id", from = "bar_id")]
 #[allow(dead_code)]
 pub struct EntFoo {
@@ -32,7 +32,7 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntFoo {
 }
 
 #[derive(EntSchema)]
-#[entschema(table = "foo", ctx = EntCtx, primary_key = id)]
+#[entschema(table = "foo", primary_key = id)]
 #[edge(from = EntFoo, on = "bar_id", to = "id")]
 #[allow(dead_code)]
 pub struct EntBar {
@@ -50,6 +50,11 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBar {
     }
 }
 
+mod bar {
+    // use super::*;
+    use uuid::Uuid;
+}
+
 #[sqlx::test]
 fn test_ent_schema_derive(pool: sqlx::PgPool) {
     let ctx = QueryContext::new(pool, ());
@@ -57,10 +62,6 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
         .where_name(P::Equals("Test".to_string()))
         .query_bar()
         .into();
-
-    EntFoo::query(&ctx).filter(EntQueryPredicate::<_, _, _, ent_foo::fields::Name>::equals(
-        "Test".to_string(),
-    ));
 
     let bar = EntBar::load(&ctx, Uuid::new_v4())
         .await

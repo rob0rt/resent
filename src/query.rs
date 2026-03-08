@@ -15,7 +15,7 @@ pub enum EntLoadError {
 }
 
 #[derive(Clone)]
-pub struct QueryContext<T = ()> {
+pub struct QueryContext<T> {
     conn: sqlx::PgPool,
     pub data: T,
 }
