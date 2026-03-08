@@ -2,7 +2,7 @@ use resent::{
     Ent, EntSchema,
     field::{EntField, EntFieldGetter, EntFieldSetter},
     mutator::{EntMutationField, EntMutationFieldState, EntMutator},
-    predicate::QueryPredicate as P,
+    predicate::{EntQueryPredicate, QueryPredicate as P},
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
     query::QueryContext,
 };
@@ -57,6 +57,10 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
         .where_name(P::Equals("Test".to_string()))
         .query_bar()
         .into();
+
+    EntFoo::query(&ctx).filter(EntQueryPredicate::<_, _, _, ent_foo::fields::Name>::equals(
+        "Test".to_string(),
+    ));
 
     let bar = EntBar::load(&ctx, Uuid::new_v4())
         .await

@@ -1,14 +1,10 @@
 use crate::{
     Ent,
     field::{EntField, EntFieldGetter, EntFieldSetter},
+    privacy::EntPrivacyPolicy,
 };
 
-pub enum EntMutationFieldState<
-    'ctx,
-    Ctx: 'ctx + Sync,
-    TEnt: Ent<'ctx, Ctx>,
-    TField: EntField<'ctx, Ctx, TEnt>,
-> {
+pub enum EntMutationFieldState<TEnt: Ent, TField: EntField<TEnt>> {
     /// The field is not being mutated.
     Unset,
 
@@ -17,35 +13,26 @@ pub enum EntMutationFieldState<
 }
 
 /// Represents a reference to a field mutation, allowing us to track the old and new values of the field.
-pub struct EntMutationField<
-    'a,
-    'ctx,
-    Ctx: 'ctx + Sync,
-    TEnt: Ent<'ctx, Ctx>,
-    TField: EntField<'ctx, Ctx, TEnt>,
-> {
+pub struct EntMutationField<'a, TEnt: Ent, TField: EntField<TEnt>> {
     old: &'a TField::Value,
-    new: &'a EntMutationFieldState<'ctx, Ctx, TEnt, TField>,
+    new: &'a EntMutationFieldState<TEnt, TField>,
 }
 
-pub trait EntMutator<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>>
+pub trait EntMutator<'ctx, Ctx: 'ctx + Sync, TEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>>
 where
     Self: Sized,
 {
-    fn set<TField: EntField<'ctx, Ctx, TEnt>>(&mut self, new_value: TField::Value)
+    fn set<TField: EntField<TEnt>>(&mut self, new_value: TField::Value)
     where
-        TField: EntFieldSetter<'ctx, Ctx, TEnt, Self>,
+        TField: EntFieldSetter<TEnt, Self>,
     {
         TField::set(self, new_value);
     }
 
-    fn get<'a, TField: EntField<'ctx, Ctx, TEnt>>(
-        &'a self,
-    ) -> EntMutationField<'a, 'ctx, Ctx, TEnt, TField>
+    fn get<'a, TField: EntField<TEnt>>(&'a self) -> EntMutationField<'a, TEnt, TField>
     where
-        TField: EntFieldGetter<'ctx, Ctx, TEnt, TEnt, <TField as EntField<'ctx, Ctx, TEnt>>::Value>,
-        TField:
-            EntFieldGetter<'ctx, Ctx, TEnt, Self, EntMutationFieldState<'ctx, Ctx, TEnt, TField>>,
+        TField: EntFieldGetter<TEnt, TEnt, <TField as EntField<TEnt>>::Value>,
+        TField: EntFieldGetter<TEnt, Self, EntMutationFieldState<TEnt, TField>>,
     {
         EntMutationField {
             old: TField::get(self.get_ent()),

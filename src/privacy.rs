@@ -7,12 +7,12 @@ pub enum PrivacyRuleOutcome {
 }
 
 #[async_trait::async_trait]
-pub trait EntQueryPrivacyRule<'ctx, Ctx: 'ctx + Sync, T: Ent<'ctx, Ctx>>: Sync + Send {
+pub trait EntQueryPrivacyRule<'ctx, Ctx: 'ctx + Sync, T: Ent>: Sync + Send {
     async fn evaluation(&self, ctx: &QueryContext<Ctx>, ent: &T) -> PrivacyRuleOutcome;
 }
 
 #[async_trait::async_trait]
-pub trait EntMutationPrivacyRule<'ctx, Ctx: 'ctx + Sync, T: Ent<'ctx, Ctx>>: Sync + Send {
+pub trait EntMutationPrivacyRule<'ctx, Ctx: 'ctx + Sync, T: Ent>: Sync + Send {
     async fn evaluation(&self, ctx: &QueryContext<Ctx>, ent: &T) -> PrivacyRuleOutcome;
 }
 
@@ -22,7 +22,7 @@ pub trait EntPrivacyRule<'ctx, Ctx: 'ctx + Sync>: Send + Sync {
 }
 
 #[async_trait::async_trait]
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>, T: EntPrivacyRule<'ctx, Ctx>>
+impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, T: EntPrivacyRule<'ctx, Ctx>>
     EntQueryPrivacyRule<'ctx, Ctx, TEnt> for T
 {
     async fn evaluation(&self, ctx: &QueryContext<Ctx>, _ent: &TEnt) -> PrivacyRuleOutcome {
@@ -31,7 +31,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>, T: EntPrivacyRule<'ctx, Ctx>>
 }
 
 #[async_trait::async_trait]
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>, T: EntPrivacyRule<'ctx, Ctx>>
+impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, T: EntPrivacyRule<'ctx, Ctx>>
     EntMutationPrivacyRule<'ctx, Ctx, TEnt> for T
 {
     async fn evaluation(&self, ctx: &QueryContext<Ctx>, _ent: &TEnt) -> PrivacyRuleOutcome {

@@ -1,9 +1,10 @@
 use crate::{
     Ent,
     field::{EntField, EntFieldPredicate},
+    predicate::EntQueryPredicate,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
 };
-use sea_query::SelectStatement;
+use sea_query::{Expr, SelectStatement};
 
 #[derive(Debug)]
 pub enum EntLoadError {
@@ -32,30 +33,55 @@ impl<T> QueryContext<T> {
     }
 }
 
-pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>> {
-    field_queries: Vec<sea_query::Expr>,
+trait EntQueryFilter<TEnt: Ent>: Into<Expr> {}
+
+pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> {
+    // filters: Vec<Box<dyn EntQueryFilter<'ctx, Ctx, TEnt> + 'ctx>>,
     limit: Option<usize>,
     ctx: &'ctx QueryContext<Ctx>,
     _marker: std::marker::PhantomData<TEnt>,
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>> EntQuery<'ctx, Ctx, TEnt> {
+trait QueryPredicate {}
+
+impl<TEnt: Ent, TField: EntField<TEnt>> QueryPredicate for EntFieldPredicate<TEnt, TField> {}
+
+impl<TEnt: Ent, T: Into<Expr>, TField: EntField<TEnt>> QueryPredicate
+    for EntQueryPredicate<TEnt, TField, T>
+{
+}
+
+trait EntEdge {}
+
+impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>> EntQuery<'ctx, Ctx, TEnt> {
     pub fn new(ctx: &'ctx QueryContext<Ctx>) -> Self {
         Self {
-            field_queries: Vec::new(),
+            // filters: Vec::new(),
             limit: None,
             ctx,
             _marker: std::marker::PhantomData,
         }
     }
 
-    pub fn filter<TField: EntField<'ctx, Ctx, TEnt>>(
-        mut self,
-        field_query: EntFieldPredicate<'ctx, Ctx, TEnt, TField>,
-    ) -> Self {
-        self.field_queries.push(field_query.into());
+    // pub fn filter<TField: EntField<'ctx, Ctx, TEnt>>(
+    //     mut self,
+    //     field_query: EntFieldPredicate<'ctx, Ctx, TEnt, TField>,
+    // ) -> Self {
+    //     self.field_queries.push(field_query.into());
+    //     self
+    // }
+
+    pub fn filter<TPredicate: QueryPredicate>(mut self, predicate: TPredicate) -> Self {
         self
     }
+
+    // pub fn filter<TEdge, TPredicate>(mut self, predicate: TPredicate) -> Self
+    // where
+    //     TEdge: EntEdge,
+    //     TPredicate: QueryPredicate,
+    // {
+    //     self
+    // }
 
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
@@ -111,8 +137,8 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>> EntQuery<'ctx, Ctx, TEnt> {
     }
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>>
-    Into<(&'ctx QueryContext<Ctx>, sea_query::SelectStatement)> for EntQuery<'ctx, Ctx, TEnt>
+impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<(&'ctx QueryContext<Ctx>, sea_query::SelectStatement)>
+    for EntQuery<'ctx, Ctx, TEnt>
 {
     fn into(self) -> (&'ctx QueryContext<Ctx>, sea_query::SelectStatement) {
         // use sea_query::{Asterisk, ExprTrait, IntoIden, Query};
@@ -120,9 +146,9 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent<'ctx, Ctx>>
         query
             .column(sea_query::Asterisk)
             .from(sea_query::Alias::new(TEnt::TABLE_NAME));
-        for expr in self.field_queries {
-            query.and_where(expr);
-        }
+        // for expr in self.field_queries {
+        //     query.and_where(expr);
+        // }
         if let Some(limit) = self.limit {
             query.limit(limit as u64);
         }
