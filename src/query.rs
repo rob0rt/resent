@@ -25,7 +25,7 @@ impl<T> QueryContext<T> {
         Self { conn, data }
     }
 
-    pub fn with(&self, data: T) -> QueryContext<T> {
+    pub fn with<R>(&self, data: R) -> QueryContext<R> {
         QueryContext {
             conn: self.conn.clone(),
             data,
