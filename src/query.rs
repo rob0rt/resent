@@ -1,7 +1,6 @@
 use crate::{
     Ent,
     field::{EntField, EntFieldPredicate},
-    predicate::EntQueryPredicate,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
 };
 use sea_query::{Expr, SelectStatement};
@@ -33,55 +32,30 @@ impl<T> QueryContext<T> {
     }
 }
 
-trait EntQueryFilter<TEnt: Ent>: Into<Expr> {}
-
 pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> {
-    // filters: Vec<Box<dyn EntQueryFilter<'ctx, Ctx, TEnt> + 'ctx>>,
+    filters: Vec<Expr>,
     limit: Option<usize>,
     ctx: &'ctx QueryContext<Ctx>,
     _marker: std::marker::PhantomData<TEnt>,
 }
 
-trait QueryPredicate {}
-
-impl<TEnt: Ent, TField: EntField<TEnt>> QueryPredicate for EntFieldPredicate<TEnt, TField> {}
-
-impl<TEnt: Ent, T: Into<Expr>, TField: EntField<TEnt>> QueryPredicate
-    for EntQueryPredicate<TEnt, TField, T>
-{
-}
-
-trait EntEdge {}
-
 impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>> EntQuery<'ctx, Ctx, TEnt> {
     pub fn new(ctx: &'ctx QueryContext<Ctx>) -> Self {
         Self {
-            // filters: Vec::new(),
+            filters: Vec::new(),
             limit: None,
             ctx,
             _marker: std::marker::PhantomData,
         }
     }
 
-    // pub fn filter<TField: EntField<'ctx, Ctx, TEnt>>(
-    //     mut self,
-    //     field_query: EntFieldPredicate<'ctx, Ctx, TEnt, TField>,
-    // ) -> Self {
-    //     self.field_queries.push(field_query.into());
-    //     self
-    // }
-
-    pub fn filter<TPredicate: QueryPredicate>(mut self, predicate: TPredicate) -> Self {
+    pub fn filter<TField: EntField<TEnt>>(
+        mut self,
+        field_query: EntFieldPredicate<TEnt, TField>,
+    ) -> Self {
+        self.filters.push(field_query.into());
         self
     }
-
-    // pub fn filter<TEdge, TPredicate>(mut self, predicate: TPredicate) -> Self
-    // where
-    //     TEdge: EntEdge,
-    //     TPredicate: QueryPredicate,
-    // {
-    //     self
-    // }
 
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
@@ -146,9 +120,9 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<(&'ctx QueryContext<Ctx>, sea_query
         query
             .column(sea_query::Asterisk)
             .from(sea_query::Alias::new(TEnt::TABLE_NAME));
-        // for expr in self.field_queries {
-        //     query.and_where(expr);
-        // }
+        for expr in self.filters {
+            query.and_where(expr);
+        }
         if let Some(limit) = self.limit {
             query.limit(limit as u64);
         }
