@@ -211,7 +211,10 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     let mutator_name = format_ident!("{}Mutation", name);
     let table_str = &args.table;
 
-    let field_structs = gen_field_structs(&fields, name, &mutator_name);
+    let field_structs = fields.iter().map(|field| field.ent_field_def(name, &mutator_name));
+    let field_query_method_defs = fields.iter().map(|field| field.ent_query_method_def(name));
+    let field_query_impls = fields.iter().map(|field| field.ent_query_impl(name));
+    let field_edge_query_impls = fields.iter().map(|field| field.ent_edge_query_impl(name));
 
     let mutator_fields = fields.iter().map(|field| {
         let ident = field.ident.as_ref().unwrap();
@@ -224,8 +227,6 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     let edge_query_methods = gen_edge_query_methods(&edges);
     let primary_key_loader_method = gen_primary_key_loader_method(&args.primary_key, &fields);
     
-    let (field_filter_trait_methods, field_filter_impl_methods) =
-        gen_field_filter_methods(&fields, &mod_name, name);
     let (edge_ent_query_trait_methods, edge_ent_query_impl_methods) =
         gen_edge_ent_query_methods(&edges);
     
@@ -269,18 +270,22 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
             }
         }
 
-        pub trait #query_trait_name<'ctx, Ctx: 'ctx + Sync> {
-            #(#field_filter_trait_methods)*
-            #(#edge_ent_query_trait_methods)*
+        pub trait #query_trait_name<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> {
+            #(#field_query_method_defs)*
         }
 
-        impl<'ctx, Ctx: 'ctx + Sync> #query_trait_name<'ctx, Ctx>
-        for resent::query::EntQuery<'ctx, Ctx, #name>
+        impl<'ctx, Ctx: 'ctx + Sync> #query_trait_name<'ctx, Ctx, #name, ()>
+            for resent::query::EntQuery<'ctx, Ctx, #name>
         where
             #name: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
         {
-            #(#field_filter_impl_methods)*
-            #(#edge_ent_query_impl_methods)*
+            #(#field_query_impls)*
+        }
+
+        impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> #query_trait_name<'ctx, Ctx, TEnt, TEdges>
+            for resent::query::EntQuery<'ctx, Ctx, resent::query::EntWithEdges<TEnt, TEdges>>
+        {
+            #(#field_edge_query_impls)*
         }
 
         impl From<sqlx::postgres::PgRow> for #name {
@@ -299,73 +304,90 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
 // Code generation helpers
 // ---------------------------------------------------------------------------
 
-/// EntField impls for each struct field, e.g. `struct Id; impl EntField for Id { ... }`
-fn gen_field_structs(
-    fields: &[EntStructField],
-    name: &syn::Ident,
-    mutator_name: &syn::Ident,
-) -> Vec<proc_macro2::TokenStream> {
-    fields
-        .iter()
-        .map(|field| {
-            let ident = field.ident.as_ref().unwrap();
-            let struct_name = format_ident!("{}", ident.to_string().to_case(Case::Pascal));
-            let field_name = ident.to_string();
-            let field_type = &field.ty;
+impl EntStructField {
+    fn filter_method_name(&self) -> proc_macro2::Ident {
+        format_ident!("where_{}", self.ident.as_ref().unwrap())
+    }
 
-            quote! {
-                pub struct #struct_name;
+    fn struct_name(&self) -> proc_macro2::Ident {
+        format_ident!("{}", self.ident.as_ref().unwrap().to_string().to_case(Case::Pascal))
+    }
 
-                impl resent::field::EntField<#name> for #struct_name {
-                    const NAME: &'static str = #field_name;
-                    type Value = #field_type;
-                }
+    fn ent_field_def(&self, ent_name: &syn::Ident, ent_mutator_name: &syn::Ident) -> proc_macro2::TokenStream {
+        let ident = self.ident.as_ref().unwrap();
+        let struct_name = self.struct_name();
+        let field_name = ident.to_string();
+        let field_type = &self.ty;
+        quote! {
+            pub struct #struct_name;
 
-                impl resent::field::EntFieldSetter<#name, #mutator_name> for #struct_name {
-                    fn set(target: &mut #mutator_name, new_value: Self::Value) {
-                        target.#ident = resent::mutator::EntMutationFieldState::Set(Box::new(new_value));
-                    }
+            impl resent::field::EntField<#ent_name> for #struct_name {
+                const NAME: &'static str = #field_name;
+                type Value = #field_type;
+            }
+
+            impl resent::field::EntFieldSetter<#ent_name, #ent_mutator_name> for #struct_name {
+                fn set(target: &mut #ent_mutator_name, new_value: Self::Value) {
+                    target.#ident = resent::mutator::EntMutationFieldState::Set(Box::new(new_value));
                 }
             }
-        })
-        .collect()
-}
+        }
+    }
 
-/// Generates filter methods for each field, e.g. `where_id(self, predicate) -> EntQuery<...>`
-fn gen_field_filter_methods(
-    fields: &[EntStructField],
-    mod_name: &proc_macro2::Ident,
-    name: &syn::Ident,
-) -> (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) {
-    fields
-        .iter()
-        .map(|field| {
-            let fn_name = field.ident.as_ref().unwrap();
-            let filter_name = format_ident!("where_{}", fn_name);
-            let struct_name = format_ident!("{}", fn_name.to_string().to_case(Case::Pascal));
-            let field_type = &field.ty;
+    fn ent_query_method_def(&self, ent_name: &syn::Ident) -> proc_macro2::TokenStream {
+        let filter_name = self.filter_method_name();
+        let field_type = &self.ty;
+        quote! {
+            fn #filter_name<Index>(
+                self,
+                predicate: resent::predicate::QueryPredicate<#field_type>,
+            ) -> Self
+            where
+                (TEnt, TEdges): resent::query::ContainsEnt<#ent_name, Index>;
+        }
+    }
 
-            let trait_method = quote! {
-                fn #filter_name(
-                    self,
-                    predicate: resent::predicate::QueryPredicate<#field_type>,
-                ) -> resent::query::EntQuery<'ctx, Ctx, #name>;
-            };
+    fn ent_query_impl(&self, ent_name: &syn::Ident) -> proc_macro2::TokenStream {
+        let filter_name = self.filter_method_name();
+        let field_type = &self.ty;
+        let mod_name = Self::ent_field_module_name(ent_name);
+        let struct_name = self.struct_name();
+        quote! {
+            fn #filter_name<Index>(
+                self, predicate:
+                resent::predicate::QueryPredicate<#field_type>,
+            ) -> Self {
+                self.filter(
+                    <#mod_name::#struct_name as resent::field::EntField<#ent_name>>::predicate(predicate)
+                )
+            }
+        }
+    }
 
-            let impl_method = quote! {
-                fn #filter_name(
-                    self, predicate:
-                    resent::predicate::QueryPredicate<#field_type>,
-                ) -> resent::query::EntQuery<'ctx, Ctx, #name> {
-                    self.filter(
-                        <#mod_name::fields::#struct_name as resent::field::EntField<#name>>::predicate(predicate)
-                    )
-                }
-            };
+    fn ent_edge_query_impl(&self, ent_name: &syn::Ident) -> proc_macro2::TokenStream {
+        let filter_name = self.filter_method_name();
+        let field_type = &self.ty;
+        let mod_name = Self::ent_field_module_name(ent_name);
+        let struct_name = self.struct_name();
+        quote! {
+            fn #filter_name<Index>(
+                self, predicate:
+                resent::predicate::QueryPredicate<#field_type>,
+            ) -> Self
+            where
+                (TEnt, TEdges): resent::query::ContainsEnt<#ent_name, Index>,
+            {
+                self.filter(
+                    <#mod_name::#struct_name as resent::field::EntField<#ent_name>>::predicate(predicate)
+                )
+            }
+        }
+    }
 
-            (trait_method, impl_method)
-        })
-        .unzip()
+    fn ent_field_module_name(ent_name: &syn::Ident) -> proc_macro2::TokenStream {
+        let ent_module_name = format_ident!("{}", ent_name.to_string().to_case(Case::Snake));
+        quote! { #ent_module_name::fields }
+    }
 }
 
 /// Generates query methods for edge entities, e.g. `query_bar(ctx) -> EntQuery<..., BarEnt>`

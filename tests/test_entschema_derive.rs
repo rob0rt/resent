@@ -1,8 +1,7 @@
 use resent::{
-    Ent, EntSchema,
-    field::{EntField, EntFieldGetter, EntFieldSetter},
-    mutator::{EntMutationField, EntMutationFieldState, EntMutator},
-    predicate::{EntQueryPredicate, QueryPredicate as P},
+    Ent, EntEdgeConfig, EntSchema,
+    field::EntField,
+    predicate::QueryPredicate as P,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
     query::QueryContext,
 };
@@ -57,36 +56,50 @@ pub struct EntBaz {
     id: Uuid,
 }
 
-mod bar {
-    // use super::*;
-    use uuid::Uuid;
+impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBaz {
+    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, EntCtx, Self>>> {
+        vec![Box::new(AlwaysAllowRule)]
+    }
+
+    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, EntCtx, Self>>> {
+        vec![Box::new(AlwaysAllowRule)]
+    }
+}
+
+impl EntEdgeConfig<EntBar> for EntBaz {
+    type SourceField = ent_baz::fields::Id;
+    type TargetField = ent_bar::fields::Id;
 }
 
 #[sqlx::test]
 fn test_ent_schema_derive(pool: sqlx::PgPool) {
     let ctx = QueryContext::new(pool, ());
-    let (_, f): (&QueryContext<()>, SelectStatement) = EntFoo::query(&ctx)
-        .where_name(P::Equals("Test".to_string()))
-        .query_bar()
-        .into();
 
-    let bar = EntBar::load(&ctx, Uuid::new_v4())
-        .await
-        .expect("Failed to load EntFoo");
-
-    let foo = EntFoo::query(&ctx)
+    let q = EntBaz::query(&ctx)
+        .where_id(P::Equals(Uuid::new_v4()))
         .join::<EntBar>()
-        .join::<EntBaz>()
-        .filter(ent_bar::fields::Id::predicate(P::InSubquery(f)))
-        .filter(ent_foo::fields::Name::predicate(P::Equals(
-            "Test".to_string(),
-        )))
-        .filter(ent_baz::fields::Id::predicate(P::Equals(Uuid::new_v4())))
+        .where_id(P::Equals(Uuid::new_v4()))
         .foo();
 
-    let asd = foo.bar_id;
-    let bar: &EntBar = foo.edge();
-    let baz: &EntBaz = foo.edge();
+    // let (_, f): (&QueryContext<()>, SelectStatement) = EntFoo::query(&ctx)
+    //     .where_name(P::Equals("Test".to_string()))
+    //     .query_bar()
+    //     .into();
+
+    // let bar = EntBar::load(&ctx, Uuid::new_v4())
+    //     .await
+    //     .expect("Failed to load EntFoo");
+
+    // let foo = EntFoo::query(&ctx)
+    //     .join::<EntBar>()
+    //     .filter(ent_bar::fields::Id::predicate(P::InSubquery(f)))
+    //     .filter(ent_foo::fields::Name::predicate(P::Equals(
+    //         "Test".to_string(),
+    //     )))
+    //     .foo();
+
+    // let asd = foo.bar_id;
+    // let bar: &EntBar = foo.edge();
 
     // let mut mutator = EntBarMutation {
     //     ent: bar,

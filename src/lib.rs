@@ -9,6 +9,8 @@ pub use resent_macros::EntSchema;
 use privacy::EntPrivacyPolicy;
 use query::{EntQuery, QueryContext};
 
+use crate::field::EntField;
+
 pub trait Ent: Sized + From<sqlx::postgres::PgRow> {
     const TABLE_NAME: &'static str;
 
@@ -18,4 +20,12 @@ pub trait Ent: Sized + From<sqlx::postgres::PgRow> {
     {
         EntQuery::new(context)
     }
+}
+
+pub trait EntEdgeConfig<TTarget: Ent>
+where
+    Self: Ent,
+{
+    type SourceField: EntField<Self>;
+    type TargetField: EntField<TTarget>;
 }
