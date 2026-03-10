@@ -32,11 +32,11 @@ impl<T> QueryContext<T> {
     }
 }
 
-pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> {
+pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TOut> {
     filters: Vec<Expr>,
     limit: Option<usize>,
     ctx: &'ctx QueryContext<Ctx>,
-    _marker: std::marker::PhantomData<TEnt>,
+    _marker: std::marker::PhantomData<TOut>,
 }
 
 impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>> EntQuery<'ctx, Ctx, TEnt> {
@@ -60,6 +60,16 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>> EntQuery<'
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
         self
+    }
+
+    pub fn join<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, (TOtherEnt, ())>> {
+        // Note: This is a placeholder implementation. The actual join logic would need to be implemented here.
+        EntQuery {
+            filters: self.filters,
+            limit: self.limit,
+            ctx: self.ctx,
+            _marker: std::marker::PhantomData,
+        }
     }
 
     pub async fn load(self) -> Result<Vec<TEnt>, EntLoadError> {
@@ -111,6 +121,37 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>> EntQuery<'
     }
 }
 
+impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>, TEdges>
+    EntQuery<'ctx, Ctx, EntWithEdges<TEnt, TEdges>>
+{
+    pub fn filter<TAnyEnt: Ent, TField: EntField<TAnyEnt>, Index>(
+        mut self,
+        field_query: EntFieldPredicate<TAnyEnt, TField>,
+    ) -> Self
+    where
+        (TEnt, TEdges): ContainsEnt<TAnyEnt, Index>,
+    {
+        self.filters.push(field_query.into());
+        self
+    }
+
+    pub fn join<TOtherEnt: Ent>(
+        self,
+    ) -> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, (TOtherEnt, TEdges)>> {
+        // Note: This is a placeholder implementation. The actual join logic would need to be implemented here.
+        EntQuery {
+            filters: self.filters,
+            limit: self.limit,
+            ctx: self.ctx,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn foo(self) -> EntWithEdges<TEnt, TEdges> {
+        unimplemented!()
+    }
+}
+
 impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<(&'ctx QueryContext<Ctx>, sea_query::SelectStatement)>
     for EntQuery<'ctx, Ctx, TEnt>
 {
@@ -130,45 +171,64 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<(&'ctx QueryContext<Ctx>, sea_query
     }
 }
 
-// struct Here;
-// struct There<T>(std::marker::PhantomData<T>);
+type Foo = EntWithEdges<String, (i32, (bool, ()))>;
 
-// trait GetEdge<Edge, Index> {
-//     fn edge(&self) -> &Edge;
-// }
+fn test() {
+    let foo = Foo {
+        ent: "Hello".to_string(),
+        edges: (42, (true, ())),
+    };
 
-// impl<Edge, T> GetEdge<Edge, Here> for (Edge, T) {
-//     fn edge(&self) -> &Edge {
-//         &self.0
-//     }
-// }
+    let i32: &i32 = foo.edge();
+    let bool: &bool = foo.edge();
+    // assert_eq!(*i32, 42);
+}
 
-// impl<Edge, H, T, Index> GetEdge<Edge, There<Index>> for (H, T)
-// where
-//     T: GetEdge<Edge, Index>,
-// {
-//     fn edge(&self) -> &Edge {
-//         self.1.edge()
-//     }
-// }
+pub struct Here;
+pub struct There<T>(std::marker::PhantomData<T>);
 
-// struct EntWithEdges<E, Edges> {
-//     ent: E,
-//     edges: Edges,
-// }
+pub trait GetEdge<Edge, Index> {
+    fn edge(&self) -> &Edge;
+}
 
-// impl<E, Edges> EntWithEdges<E, Edges> {
-//     fn edge<Edge, Index>(&self) -> &Edge
-//     where
-//         Edges: GetEdge<Edge, Index>,
-//     {
-//         self.edges.edge()
-//     }
-// }
+impl<Edge, T> GetEdge<Edge, Here> for (Edge, T) {
+    fn edge(&self) -> &Edge {
+        &self.0
+    }
+}
 
-// impl<E, Edges> std::ops::Deref for EntWithEdges<E, Edges> {
-//     type Target = E;
-//     fn deref(&self) -> &Self::Target {
-//         &self.ent
-//     }
-// }
+impl<Edge, H, T, Index> GetEdge<Edge, There<Index>> for (H, T)
+where
+    T: GetEdge<Edge, Index>,
+{
+    fn edge(&self) -> &Edge {
+        self.1.edge()
+    }
+}
+
+pub trait ContainsEnt<E, Index> {}
+
+impl<E, T> ContainsEnt<E, Here> for (E, T) {}
+
+impl<E, H, T, Index> ContainsEnt<E, There<Index>> for (H, T) where T: ContainsEnt<E, Index> {}
+
+pub struct EntWithEdges<E, Edges> {
+    ent: E,
+    edges: Edges,
+}
+
+impl<E, Edges> EntWithEdges<E, Edges> {
+    pub fn edge<Edge, Index>(&self) -> &Edge
+    where
+        Edges: GetEdge<Edge, Index>,
+    {
+        self.edges.edge()
+    }
+}
+
+impl<E, Edges> std::ops::Deref for EntWithEdges<E, Edges> {
+    type Target = E;
+    fn deref(&self) -> &Self::Target {
+        &self.ent
+    }
+}

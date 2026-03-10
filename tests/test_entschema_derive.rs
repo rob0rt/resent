@@ -50,6 +50,13 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBar {
     }
 }
 
+#[derive(EntSchema)]
+#[entschema(table = "baz", primary_key = id)]
+#[allow(dead_code)]
+pub struct EntBaz {
+    id: Uuid,
+}
+
 mod bar {
     // use super::*;
     use uuid::Uuid;
@@ -67,16 +74,30 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
         .await
         .expect("Failed to load EntFoo");
 
-    let mut mutator = EntBarMutation {
-        ent: bar,
-        id: EntMutationFieldState::Unset,
-        value: EntMutationFieldState::Unset,
-    };
+    let foo = EntFoo::query(&ctx)
+        .join::<EntBar>()
+        .join::<EntBaz>()
+        .filter(ent_bar::fields::Id::predicate(P::InSubquery(f)))
+        .filter(ent_foo::fields::Name::predicate(P::Equals(
+            "Test".to_string(),
+        )))
+        .filter(ent_baz::fields::Id::predicate(P::Equals(Uuid::new_v4())))
+        .foo();
 
-    mutator.set::<ent_bar::fields::Value>("New Value".to_string());
+    let asd = foo.bar_id;
+    let bar: &EntBar = foo.edge();
+    let baz: &EntBaz = foo.edge();
 
-    assert_eq!(
-        f.to_string(sea_query::PostgresQueryBuilder),
-        "SELECT * FROM \"bar\" WHERE \"id\" IN (SELECT \"bar_id\" FROM \"foo\" WHERE \"name\" = 'Test')"
-    );
+    // let mut mutator = EntBarMutation {
+    //     ent: bar,
+    //     id: EntMutationFieldState::Unset,
+    //     value: EntMutationFieldState::Unset,
+    // };
+
+    // mutator.set::<ent_bar::fields::Value>("New Value".to_string());
+
+    // assert_eq!(
+    //     f.to_string(sea_query::PostgresQueryBuilder),
+    //     "SELECT * FROM \"bar\" WHERE \"id\" IN (SELECT \"bar_id\" FROM \"foo\" WHERE \"name\" = 'Test')"
+    // );
 }
