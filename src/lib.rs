@@ -1,17 +1,15 @@
 pub mod field;
 pub mod mutator;
-pub mod predicate;
 pub mod privacy;
 pub mod query;
 
 pub use resent_macros::EntSchema;
 
+use field::EntField;
 use privacy::EntPrivacyPolicy;
-use query::{EntQuery, QueryContext};
+use query::{EntLoadOnlyError, EntQuery, QueryContext, predicate::QueryPredicate as P};
 
-use crate::field::EntField;
-
-pub trait Ent: Sized + From<sqlx::postgres::PgRow> {
+pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     const TABLE_NAME: &'static str;
 
     /// Start an EntQuery for this entity type.
@@ -26,16 +24,15 @@ pub trait Ent: Sized + From<sqlx::postgres::PgRow> {
     fn load_edge<'ctx, TOtherEnt: Ent, Ctx: 'ctx + Sync>(
         &self,
         context: &'ctx QueryContext<Ctx>,
-    ) -> TOtherEnt
+    ) -> impl std::future::Future<Output = Result<TOtherEnt, EntLoadOnlyError>> + Send
     where
         Self: EntEdgeConfig<TOtherEnt>,
         TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        let query = EntQuery::<_, TOtherEnt>::new(context);
-        query.
-        unimplemented!()
+        self.query_edge(context).load_only()
     }
 
+    /// Create an EntQuery for an edge, but don't execute it - this is useful for building up more complex queries that involve edges.
     fn query_edge<'ctx, TOtherEnt: Ent, Ctx: 'ctx + Sync>(
         &self,
         context: &'ctx QueryContext<Ctx>,
@@ -44,9 +41,12 @@ pub trait Ent: Sized + From<sqlx::postgres::PgRow> {
         Self: EntEdgeConfig<TOtherEnt>,
         TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        unimplemented!()
+        let query = EntQuery::<_, TOtherEnt>::new(context);
+        query
+            .where_field::<Self::TargetField>(P::equals(Self::SourceField::get_value(self).clone()))
     }
 
+    /// Create an EntQuery for an inbound edge (edge reference)
     fn query_edge_ref<'ctx, TOtherEnt: Ent, Ctx: 'ctx + Sync>(
         &self,
         context: &'ctx QueryContext<Ctx>,
@@ -55,7 +55,10 @@ pub trait Ent: Sized + From<sqlx::postgres::PgRow> {
         TOtherEnt: EntEdgeConfig<Self>,
         TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        unimplemented!()
+        let query = EntQuery::<_, TOtherEnt>::new(context);
+        query.where_field::<TOtherEnt::SourceField>(P::equals(
+            TOtherEnt::TargetField::get_value(self).clone(),
+        ))
     }
 }
 

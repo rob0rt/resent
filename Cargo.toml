@@ -5,8 +5,9 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1.64"
+chrono = "0.4.44"
 resent-macros = { path = "./macros" }
-sea-query = { version = "1.0.0-rc.31", features = ["with-uuid"] }
+sea-query = { version = "1.0.0-rc.31", features = ["with-uuid", "with-chrono"] }
 sqlx = { version = "0.8.6", features = ["postgres", "uuid", "chrono"] }
 
 [dev-dependencies]

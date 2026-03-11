@@ -1,8 +1,11 @@
+pub mod predicate;
+
 use crate::{
     Ent, EntEdgeConfig,
-    field::{EntField, EntFieldPredicate},
+    field::EntField,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
 };
+use predicate::FieldPredicate;
 use sea_query::{Expr, SelectStatement};
 
 #[derive(Debug)]
@@ -60,11 +63,11 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         }
     }
 
-    pub fn filter<TField: EntField<Ent = TEnt>>(
+    pub fn where_field<TField: EntField<Ent = TEnt>>(
         mut self,
-        field_query: EntFieldPredicate<TField>,
+        field_query: impl FieldPredicate<TField>,
     ) -> Self {
-        self.filters.push(field_query.into());
+        self.filters.push(field_query.to_expr());
         self
     }
 
@@ -156,14 +159,14 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
 }
 
 impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, TEdges>> {
-    pub fn filter<TAnyEnt: Ent, TField: EntField<Ent = TAnyEnt>, Index>(
+    pub fn where_field<TAnyEnt: Ent, TField: EntField<Ent = TEnt>, Index>(
         mut self,
-        field_query: EntFieldPredicate<TField>,
+        field_query: impl FieldPredicate<TField>,
     ) -> Self
     where
         (TEnt, TEdges): ContainsEnt<TAnyEnt, Index>,
     {
-        self.filters.push(field_query.into());
+        self.filters.push(field_query.to_expr());
         self
     }
 

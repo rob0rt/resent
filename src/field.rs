@@ -1,26 +1,12 @@
-use crate::{Ent, predicate::QueryPredicate};
+use crate::Ent;
 use sea_query::Expr;
 
 pub trait EntField: Sized {
     const NAME: &'static str;
-    type Value: Into<Expr> + 'static;
+    type Value: Into<Expr> + Clone + 'static;
     type Ent: Ent;
 
-    fn predicate(predicate: QueryPredicate<Self::Value>) -> EntFieldPredicate<Self> {
-        EntFieldPredicate {
-            predicate: predicate.into(),
-        }
-    }
-}
-
-pub struct EntFieldPredicate<TField: EntField> {
-    predicate: QueryPredicate<TField::Value>,
-}
-
-impl<TField: EntField> Into<Expr> for EntFieldPredicate<TField> {
-    fn into(self) -> Expr {
-        self.predicate.to_expr(TField::NAME)
-    }
+    fn get_value(ent: &Self::Ent) -> &Self::Value;
 }
 
 /// A trait for getting the value of a field from an entity, used in both query predicates and mutation tracking.

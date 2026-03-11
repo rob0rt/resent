@@ -120,7 +120,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -1065,6 +1067,7 @@ name = "resent"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "resent-macros",
  "sea-query",
  "sqlx",
@@ -1126,6 +1129,7 @@ version = "1.0.0-rc.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58decdaaaf2a698170af2fa1b2e8f7b43a970e7768bf18aebaab113bada46354"
 dependencies = [
+ "chrono",
  "inherent",
  "itoa",
  "sea-query-derive",

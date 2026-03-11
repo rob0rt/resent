@@ -1,8 +1,7 @@
 use resent::{
     Ent, EntEdgeConfig, EntSchema,
-    predicate::QueryPredicate as P,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
-    query::QueryContext,
+    query::{QueryContext, predicate::FieldPredicate as P},
 };
 use uuid::Uuid;
 
