@@ -71,17 +71,11 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         self
     }
 
-    pub fn query<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, TOtherEnt>
+    pub fn query_edge<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, TOtherEnt>
     where
         TOtherEnt: EntEdgeConfig<TEnt>,
     {
-        // Note: This is a placeholder implementation. The actual join logic would need to be implemented here.
-        EntQuery {
-            filters: self.filters,
-            limit: self.limit,
-            ctx: self.ctx,
-            _marker: std::marker::PhantomData,
-        }
+        unimplemented!()
     }
 
     pub fn limit(mut self, limit: usize) -> Self {
@@ -94,13 +88,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     where
         TEnt: EntEdgeConfig<TOtherEnt>,
     {
-        // Note: This is a placeholder implementation. The actual join logic would need to be implemented here.
-        EntQuery {
-            filters: self.filters,
-            limit: self.limit,
-            ctx: self.ctx,
-            _marker: std::marker::PhantomData,
-        }
+        unimplemented!()
     }
 
     pub async fn load(self) -> Result<Vec<TEnt>, EntLoadError>
@@ -159,12 +147,12 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
 }
 
 impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, TEdges>> {
-    pub fn where_field<TAnyEnt: Ent, TField: EntField<Ent = TEnt>, Index>(
+    pub fn where_field<TField: EntField, Index>(
         mut self,
         field_query: impl FieldPredicate<TField>,
     ) -> Self
     where
-        (TEnt, TEdges): ContainsEnt<TAnyEnt, Index>,
+        (TEnt, TEdges): ContainsEnt<TField::Ent, Index>,
     {
         self.filters.push(field_query.to_expr());
         self
@@ -176,13 +164,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges
     where
         TEnt: EntEdgeConfig<TOtherEnt>,
     {
-        // Note: This is a placeholder implementation. The actual join logic would need to be implemented here.
-        EntQuery {
-            filters: self.filters,
-            limit: self.limit,
-            ctx: self.ctx,
-            _marker: std::marker::PhantomData,
-        }
+        unimplemented!()
     }
 
     pub fn foo(self) -> EntWithEdges<TEnt, TEdges> {
@@ -207,19 +189,6 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<(&'ctx QueryContext<Ctx>, sea_query
         }
         (self.ctx, query.to_owned())
     }
-}
-
-type Foo = EntWithEdges<String, (i32, (bool, ()))>;
-
-fn test() {
-    let foo = Foo {
-        ent: "Hello".to_string(),
-        edges: (42, (true, ())),
-    };
-
-    let i32: &i32 = foo.edge();
-    let bool: &bool = foo.edge();
-    // assert_eq!(*i32, 42);
 }
 
 pub struct Here;

@@ -1,6 +1,6 @@
-use sea_query::{Expr, ExprTrait, Query, SelectStatement};
+use sea_query::{Expr, ExprTrait};
 
-use crate::field::EntField;
+use crate::{Ent, field::EntField};
 
 pub trait FieldPredicate<TField: EntField> {
     fn to_expr(self) -> Expr;
@@ -14,7 +14,7 @@ impl QueryPredicate {
 
         impl<T: EntField> FieldPredicate<T> for EqualsPredicate<T> {
             fn to_expr(self) -> Expr {
-                Expr::expr(Expr::col(T::NAME)).eq(self.0)
+                Expr::expr(Expr::col((T::Ent::TABLE_NAME, T::NAME))).eq(self.0)
             }
         }
 
@@ -28,33 +28,34 @@ impl QueryPredicate {
 
         impl<T: EntField<Value = chrono::NaiveDateTime>> FieldPredicate<T> for AfterPredicate {
             fn to_expr(self) -> Expr {
-                Expr::expr(Expr::col(T::NAME)).gt(self.0)
+                Expr::expr(Expr::col((T::Ent::TABLE_NAME, T::NAME))).gt(self.0)
             }
         }
 
         AfterPredicate(value)
     }
+
+    // pub fn is_in<TField: EntField, T: InFieldExpression<TField>>(
+    //     values: T,
+    // ) -> impl FieldPredicate<TField> {
+    //     // struct InPredicate<T: EntField>(Vec<T::Value>);
+
+    //     // impl<T: EntField> FieldPredicate<T> for InPredicate<T> {
+    //     //     fn to_expr(self) -> Expr {
+    //     //         Expr::col(T::NAME).is_in(self.0)
+    //     //     }
+    //     // }
+
+    //     // InPredicate(values)
+    // }
 }
 
-// pub enum QueryPredicate<T: Into<Expr>> {
-//     Equals(T),
-//     Not(Box<QueryPredicate<T>>),
-//     In(Vec<T>),
-//     InSubquery(SelectStatement),
-// }
+trait InFieldExpression<TField: EntField> {
+    fn in_field(self, field: TField) -> Expr;
+}
 
-// impl<T: Into<Expr>> QueryPredicate<T> {
-//     pub fn to_expr(self, col: &str) -> Expr {
-//         match self {
-//             QueryPredicate::Equals(value) => Expr::expr(Expr::col(col.to_string())).eq(value),
-//             QueryPredicate::Not(inner) => {
-//                 let inner_expr = inner.to_expr(col);
-//                 Expr::not(inner_expr)
-//             }
-//             QueryPredicate::In(values) => Expr::col(col.to_string()).is_in(values),
-//             QueryPredicate::InSubquery(subquery) => {
-//                 Expr::col(col.to_string()).in_subquery(subquery)
-//             }
-//         }
-//     }
-// }
+impl<TField: EntField> InFieldExpression<TField> for Vec<TField::Value> {
+    fn in_field(self, field: TField) -> Expr {
+        Expr::col(TField::NAME).is_in(self)
+    }
+}
