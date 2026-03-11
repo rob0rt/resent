@@ -1,18 +1,15 @@
 use resent::{
     Ent, EntEdgeConfig, EntSchema,
-    field::EntField,
     predicate::QueryPredicate as P,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
     query::QueryContext,
 };
-use sea_query::SelectStatement;
 use uuid::Uuid;
 
 type EntCtx = ();
 
 #[derive(EntSchema)]
 #[entschema(table = "foo", primary_key = id)]
-#[edge(to = EntBar, on = "id", from = "bar_id")]
 #[allow(dead_code)]
 pub struct EntFoo {
     id: Uuid,
@@ -32,7 +29,6 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntFoo {
 
 #[derive(EntSchema)]
 #[entschema(table = "foo", primary_key = id)]
-#[edge(from = EntFoo, on = "bar_id", to = "id")]
 #[allow(dead_code)]
 pub struct EntBar {
     id: Uuid,
@@ -67,8 +63,8 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBaz {
 }
 
 impl EntEdgeConfig<EntBar> for EntBaz {
-    type SourceField = ent_baz::fields::Id;
-    type TargetField = ent_bar::fields::Id;
+    type SourceField = ent_baz::Id;
+    type TargetField = ent_bar::Id;
 }
 
 #[sqlx::test]
@@ -78,8 +74,24 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
     let q = EntBaz::query(&ctx)
         .where_id(P::Equals(Uuid::new_v4()))
         .join::<EntBar>()
-        .where_id(P::Equals(Uuid::new_v4()))
+        // .where_id(P::Equals(Uuid::new_v4()))
         .foo();
+
+    let p = EntBar::query(&ctx)
+        .query::<EntBaz>()
+        .where_id(P::Equals(Uuid::new_v4()))
+        .load_only()
+        .await
+        .unwrap();
+
+    let p = p
+        .query_edge::<EntBar, _>(&ctx)
+        .where_id(P::Equals(Uuid::new_v4()))
+        .load_only()
+        .await
+        .unwrap();
+
+    p.query_edge_ref::<EntBaz, _>(&ctx);
 
     // let (_, f): (&QueryContext<()>, SelectStatement) = EntFoo::query(&ctx)
     //     .where_name(P::Equals("Test".to_string()))

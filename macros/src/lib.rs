@@ -22,13 +22,17 @@ impl From<&syn::Expr> for EntPrimaryKey {
         match expr {
             syn::Expr::Path(p) => EntPrimaryKey::Single(p.path.clone()),
             syn::Expr::Array(a) => {
-                let paths = a.elems.iter().filter_map(|elem| {
-                    if let syn::Expr::Path(p) = elem {
-                        Some(p.path.clone())
-                    } else {
-                        None
-                    }
-                }).collect::<Vec<syn::Path>>();
+                let paths = a
+                    .elems
+                    .iter()
+                    .filter_map(|elem| {
+                        if let syn::Expr::Path(p) = elem {
+                            Some(p.path.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<syn::Path>>();
 
                 if paths.len() != a.elems.len() {
                     panic!("primary_key array must contain only paths");
@@ -53,103 +57,6 @@ struct EntSchemaArgs {
     primary_key: Option<EntPrimaryKey>,
 }
 
-/// Parses either:
-///   `#[edge(to = BarEnt, on = "id", from = "bar_id")]`  — this struct holds a FK to BarEnt
-///   `#[edge(from = FooEnt, on = "bar_id", to = "id")]`  — FooEnt holds a FK to this struct
-///
-/// In the `to` form: `to` is a Path (the remote type), `from` is a String (remote PK field).
-/// In the `from` form: `from` is a Path (the referencing type), `to` is a String (remote FK field).
-#[derive(Debug, Clone)]
-enum EntSchemaEdge {
-    To {
-        entity: syn::Path,
-        on: String,
-        from_field: String,
-    },
-    From {
-        entity: syn::Path,
-        on: String,
-        to_field: String,
-    },
-}
-
-impl FromMeta for EntSchemaEdge {
-    fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
-        let mut to_path: Option<syn::Path> = None;
-        let mut from_path: Option<syn::Path> = None;
-        let mut on: Option<String> = None;
-        let mut to_str: Option<String> = None;
-        let mut from_str: Option<String> = None;
-
-        for item in items {
-            let NestedMeta::Meta(syn::Meta::NameValue(nv)) = item else {
-                return Err(darling::Error::custom("unexpected edge attribute item"));
-            };
-            let key = nv
-                .path
-                .get_ident()
-                .map(|i| i.to_string())
-                .unwrap_or_default();
-            match key.as_str() {
-                "to" => match &nv.value {
-                    syn::Expr::Path(p) => to_path = Some(p.path.clone()),
-                    syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Str(s),
-                        ..
-                    }) => to_str = Some(s.value()),
-                    _ => {
-                        return Err(darling::Error::custom(
-                            "edge `to` must be an ident (entity type) or string (field name)",
-                        ));
-                    }
-                },
-                "from" => match &nv.value {
-                    syn::Expr::Path(p) => from_path = Some(p.path.clone()),
-                    syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Str(s),
-                        ..
-                    }) => from_str = Some(s.value()),
-                    _ => {
-                        return Err(darling::Error::custom(
-                            "edge `from` must be an ident (entity type) or string (field name)",
-                        ));
-                    }
-                },
-                "on" => match &nv.value {
-                    syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Str(s),
-                        ..
-                    }) => on = Some(s.value()),
-                    _ => return Err(darling::Error::custom("edge `on` must be a string")),
-                },
-                other => return Err(darling::Error::unknown_field(other)),
-            }
-        }
-
-        let on = on.ok_or_else(|| darling::Error::missing_field("on"))?;
-
-        if let Some(entity) = to_path {
-            let from_field = from_str.ok_or_else(|| darling::Error::missing_field("from"))?;
-            Ok(EntSchemaEdge::To {
-                entity,
-                on,
-                from_field,
-            })
-        } else if let Some(entity) = from_path {
-            let to_field = to_str.ok_or_else(|| darling::Error::missing_field("to"))?;
-            Ok(EntSchemaEdge::From {
-                entity,
-                on,
-                to_field,
-            })
-        } else {
-            Err(darling::Error::custom(
-                "edge must specify `to = EntityType` or `from = EntityType`",
-            ))
-        }
-    }
-}
-
 /// Minimal field info collected by darling.
 #[derive(Debug, Clone, FromField)]
 struct EntStructField {
@@ -170,15 +77,6 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
         Ok(v) => v,
         Err(e) => return e.write_errors().into(),
     };
-
-    // --- Parse #[edge(...)] attributes ---
-    let mut edges: Vec<EntSchemaEdge> = Vec::new();
-    for attr in input.attrs.iter().filter(|a| a.path().is_ident("edge")) {
-        match EntSchemaEdge::from_meta(&attr.meta) {
-            Ok(e) => edges.push(e),
-            Err(e) => return e.write_errors().into(),
-        }
-    }
 
     // --- Parse struct fields ---
     let named_fields = match &input.data {
@@ -211,7 +109,9 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     let mutator_name = format_ident!("{}Mutation", name);
     let table_str = &args.table;
 
-    let field_structs = fields.iter().map(|field| field.ent_field_def(name, &mutator_name));
+    let field_structs = fields
+        .iter()
+        .map(|field| field.ent_field_def(name, &mutator_name));
     let field_query_method_defs = fields.iter().map(|field| field.ent_query_method_def(name));
     let field_query_impls = fields.iter().map(|field| field.ent_query_impl(name));
     let field_edge_query_impls = fields.iter().map(|field| field.ent_edge_query_impl(name));
@@ -220,16 +120,12 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
         let ident = field.ident.as_ref().unwrap();
         let field_struct_name = format_ident!("{}", ident.to_string().to_case(Case::Pascal));
         quote! {
-            #ident: resent::mutator::EntMutationFieldState<#name, #mod_name::fields::#field_struct_name>
+            #ident: resent::mutator::EntMutationFieldState<#mod_name::#field_struct_name>
         }
     });
 
-    let edge_query_methods = gen_edge_query_methods(&edges);
     let primary_key_loader_method = gen_primary_key_loader_method(&args.primary_key, &fields);
-    
-    let (edge_ent_query_trait_methods, edge_ent_query_impl_methods) =
-        gen_edge_ent_query_methods(&edges);
-    
+
     let field_assignments = fields.iter().map(|field| {
         let ident = field.ident.as_ref().unwrap();
         quote! {
@@ -239,15 +135,12 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
 
     quote! {
         mod #mod_name {
-            pub mod fields {
-                use super::super::*;
+            use super::*;
 
-                #(#field_structs)*
-            }
+            #(#field_structs)*
         }
 
         impl #name {
-            #(#edge_query_methods)*
             #primary_key_loader_method
         }
 
@@ -310,10 +203,21 @@ impl EntStructField {
     }
 
     fn struct_name(&self) -> proc_macro2::Ident {
-        format_ident!("{}", self.ident.as_ref().unwrap().to_string().to_case(Case::Pascal))
+        format_ident!(
+            "{}",
+            self.ident
+                .as_ref()
+                .unwrap()
+                .to_string()
+                .to_case(Case::Pascal)
+        )
     }
 
-    fn ent_field_def(&self, ent_name: &syn::Ident, ent_mutator_name: &syn::Ident) -> proc_macro2::TokenStream {
+    fn ent_field_def(
+        &self,
+        ent_name: &syn::Ident,
+        ent_mutator_name: &syn::Ident,
+    ) -> proc_macro2::TokenStream {
         let ident = self.ident.as_ref().unwrap();
         let struct_name = self.struct_name();
         let field_name = ident.to_string();
@@ -321,12 +225,13 @@ impl EntStructField {
         quote! {
             pub struct #struct_name;
 
-            impl resent::field::EntField<#ent_name> for #struct_name {
+            impl resent::field::EntField for #struct_name {
                 const NAME: &'static str = #field_name;
                 type Value = #field_type;
+                type Ent = #ent_name;
             }
 
-            impl resent::field::EntFieldSetter<#ent_name, #ent_mutator_name> for #struct_name {
+            impl resent::field::EntFieldSetter<#ent_mutator_name> for #struct_name {
                 fn set(target: &mut #ent_mutator_name, new_value: Self::Value) {
                     target.#ident = resent::mutator::EntMutationFieldState::Set(Box::new(new_value));
                 }
@@ -358,7 +263,7 @@ impl EntStructField {
                 resent::predicate::QueryPredicate<#field_type>,
             ) -> Self {
                 self.filter(
-                    <#mod_name::#struct_name as resent::field::EntField<#ent_name>>::predicate(predicate)
+                    <#mod_name::#struct_name as resent::field::EntField>::predicate(predicate)
                 )
             }
         }
@@ -378,7 +283,7 @@ impl EntStructField {
                 (TEnt, TEdges): resent::query::ContainsEnt<#ent_name, Index>,
             {
                 self.filter(
-                    <#mod_name::#struct_name as resent::field::EntField<#ent_name>>::predicate(predicate)
+                    <#mod_name::#struct_name as resent::field::EntField>::predicate(predicate)
                 )
             }
         }
@@ -386,55 +291,8 @@ impl EntStructField {
 
     fn ent_field_module_name(ent_name: &syn::Ident) -> proc_macro2::TokenStream {
         let ent_module_name = format_ident!("{}", ent_name.to_string().to_case(Case::Snake));
-        quote! { #ent_module_name::fields }
+        quote! { #ent_module_name }
     }
-}
-
-/// Generates query methods for edge entities, e.g. `query_bar(ctx) -> EntQuery<..., BarEnt>`
-fn gen_edge_query_methods(
-    edges: &[EntSchemaEdge],
-) -> Vec<proc_macro2::TokenStream> {
-    edges
-        .iter()
-        .map(|edge| match edge {
-            EntSchemaEdge::To { entity, on, from_field } => {
-                let method_name = query_fn_name(entity);
-                let where_fn = format_ident!("where_{}", on);
-                let from_field = format_ident!("{}", from_field);
-
-                quote! {
-                    pub fn #method_name<'ctx, Ctx: 'ctx + Sync>(
-                        &self,
-                        ctx: &'ctx resent::query::QueryContext<Ctx>,
-                    ) -> resent::query::EntQuery<'ctx, Ctx, #entity>
-                    where
-                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>    
-                    {
-                        use resent::{Ent, query::EntQuery};
-                        #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::Equals(self.#from_field))
-                    }
-                }
-            }
-            EntSchemaEdge::From { entity, on, to_field } => {
-                let method_name = query_fn_name(entity);
-                let where_fn = format_ident!("where_{}", on);
-                let to_field = format_ident!("{}", to_field);
-
-                quote! {
-                    pub fn #method_name<'ctx, Ctx: 'ctx + Sync>(
-                        &self,
-                        ctx: &'ctx resent::query::QueryContext<Ctx>,
-                    ) -> resent::query::EntQuery<'ctx, Ctx, #entity>
-                    where
-                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
-                    {
-                        use resent::{Ent, query::EntQuery};
-                        #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::Equals(self.#to_field))
-                    }
-                }
-            }
-        })
-        .collect()
 }
 
 /// Generates a loader method for the primary key, e.g. `load(ctx, id) -> Ent`
@@ -445,14 +303,20 @@ fn gen_primary_key_loader_method(
     if let Some(pk) = primary_key {
         match pk {
             EntPrimaryKey::Single(field) => {
-                let field_name = format_ident!("{}", field.segments.last().unwrap().ident.to_string());
+                let field_name =
+                    format_ident!("{}", field.segments.last().unwrap().ident.to_string());
                 let filter_name = format_ident!("where_{}", field_name);
-                let field_type = fields.iter().find(|f| f.ident.as_ref().unwrap() == &field_name).unwrap().ty.clone();
+                let field_type = fields
+                    .iter()
+                    .find(|f| f.ident.as_ref().unwrap() == &field_name)
+                    .unwrap()
+                    .ty
+                    .clone();
                 return quote! {
                     pub async fn load<'ctx, Ctx: 'ctx + Sync>(
                         ctx: &'ctx resent::query::QueryContext<Ctx>,
                         #field_name: #field_type
-                    ) -> Result<Self, resent::query::EntLoadError> 
+                    ) -> Result<Self, resent::query::EntLoadOnlyError>
                     where
                         Self: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
                     {
@@ -461,80 +325,18 @@ fn gen_primary_key_loader_method(
                     }
                 };
             }
-            _ => {},
+            _ => {}
         };
     }
-    
+
     quote! {}
-}
-
-/// Generates query methods for edge entities that return subqueries, e.g. `query_bar() -> EntQuery<..., BarEnt>` where the filter is an IN subquery on the edge field.
-fn gen_edge_ent_query_methods(
-    edges: &[EntSchemaEdge],
-) -> (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) {
-    edges
-        .iter()
-        .map(|edge| match edge {
-            EntSchemaEdge::To { entity, on, from_field } => {
-                let method_name = query_fn_name(entity);
-                let where_fn = format_ident!("where_{}", on);
-                let from_field = format_ident!("{}", from_field);
-                
-                let trait_method = quote! {
-                    fn #method_name(self) -> resent::query::EntQuery<'ctx, Ctx, #entity>
-                    where
-                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>;
-                };
-                
-                let impl_method = quote! {
-                    fn #method_name(self) -> resent::query::EntQuery<'ctx, Ctx, #entity>
-                    where
-                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
-                    {
-                        let (ctx, mut subquery): (&'ctx resent::query::QueryContext<Ctx>, sea_query::SelectStatement) = self.into();
-                        subquery.clear_selects().column(stringify!(#from_field));
-                        use resent::{Ent, query::EntQuery};
-                        #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::InSubquery(subquery))
-                    }
-                };
-
-                (trait_method, impl_method)
-            }
-            EntSchemaEdge::From { entity, on, to_field } => {
-                let method_name = query_fn_name(entity);
-                let where_fn = format_ident!("where_{}", on);
-                let to_field = format_ident!("{}", to_field);
-
-                let trait_method = quote! {
-                    fn #method_name(self) -> resent::query::EntQuery<'ctx, Ctx, #entity>
-                    where
-                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>;
-                };
-
-                let impl_method = quote! {
-                    fn #method_name(self) -> resent::query::EntQuery<'ctx, Ctx, #entity>
-                    where
-                        #entity: resent::privacy::EntPrivacyPolicy<'ctx, Ctx>
-                    {
-                        let (ctx, mut subquery): (&'ctx resent::query::QueryContext<Ctx>, sea_query::SelectStatement) = self.into();
-                        subquery.clear_selects().column(stringify!(#to_field));
-                        use resent::{Ent, query::EntQuery};
-                        #entity::query(ctx).#where_fn(resent::predicate::QueryPredicate::InSubquery(subquery))
-                    }
-                };
-                
-                (trait_method, impl_method)
-            }
-        })
-        .unzip()
 }
 
 /// Converts an entity type path (e.g. `EntBar`) into a query method name (e.g. `query_bar`).
 fn query_fn_name(path: &syn::Path) -> proc_macro2::Ident {
     format_ident!(
         "query_{}",
-            path
-            .segments
+        path.segments
             .last()
             .unwrap()
             .ident
@@ -543,4 +345,3 @@ fn query_fn_name(path: &syn::Path) -> proc_macro2::Ident {
             .trim_start_matches("ent_")
     )
 }
-

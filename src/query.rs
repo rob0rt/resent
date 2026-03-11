@@ -5,23 +5,23 @@ use crate::{
 };
 use sea_query::{Expr, SelectStatement};
 
-/// Implemented on a source entity for each declared outbound edge type, providing
-/// a convenience method to build a filtered `EntQuery` for the target entity.
-pub trait EntEdgeQuery<TTarget: Ent> {
-    fn edge_query<'ctx, Ctx: 'ctx + Sync>(
-        &self,
-        ctx: &'ctx QueryContext<Ctx>,
-    ) -> EntQuery<'ctx, Ctx, TTarget>
-    where
-        TTarget: EntPrivacyPolicy<'ctx, Ctx>;
-}
-
 #[derive(Debug)]
 pub enum EntLoadError {
     DatabaseError(sqlx::Error),
+    InvalidPrivacyPolicy,
+}
+
+#[derive(Debug)]
+pub enum EntLoadOnlyError {
+    LoadError(EntLoadError),
     NoResults,
     TooManyResults,
-    InvalidPrivacyPolicy,
+}
+
+impl From<EntLoadError> for EntLoadOnlyError {
+    fn from(value: EntLoadError) -> Self {
+        EntLoadOnlyError::LoadError(value)
+    }
 }
 
 #[derive(Clone)]
@@ -60,12 +60,25 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         }
     }
 
-    pub fn filter<TField: EntField<TEnt>>(
+    pub fn filter<TField: EntField<Ent = TEnt>>(
         mut self,
-        field_query: EntFieldPredicate<TEnt, TField>,
+        field_query: EntFieldPredicate<TField>,
     ) -> Self {
         self.filters.push(field_query.into());
         self
+    }
+
+    pub fn query<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, TOtherEnt>
+    where
+        TOtherEnt: EntEdgeConfig<TEnt>,
+    {
+        // Note: This is a placeholder implementation. The actual join logic would need to be implemented here.
+        EntQuery {
+            filters: self.filters,
+            limit: self.limit,
+            ctx: self.ctx,
+            _marker: std::marker::PhantomData,
+        }
     }
 
     pub fn limit(mut self, limit: usize) -> Self {
@@ -73,6 +86,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         self
     }
 
+    /// A join will include a related entity in the query output
     pub fn join<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, (TOtherEnt, ())>>
     where
         TEnt: EntEdgeConfig<TOtherEnt>,
@@ -128,23 +142,23 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     }
 
     /// Loads a single entity, returning an error if there are zero or more than one results.
-    pub async fn load_only(self) -> Result<TEnt, EntLoadError>
+    pub async fn load_only(self) -> Result<TEnt, EntLoadOnlyError>
     where
         TEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
         let mut results = self.limit(2).load().await?;
         match results.len() {
-            0 => Err(EntLoadError::NoResults),
+            0 => Err(EntLoadOnlyError::NoResults),
             1 => Ok(results.remove(0)),
-            _ => Err(EntLoadError::TooManyResults),
+            _ => Err(EntLoadOnlyError::TooManyResults),
         }
     }
 }
 
 impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, TEdges>> {
-    pub fn filter<TAnyEnt: Ent, TField: EntField<TAnyEnt>, Index>(
+    pub fn filter<TAnyEnt: Ent, TField: EntField<Ent = TAnyEnt>, Index>(
         mut self,
-        field_query: EntFieldPredicate<TAnyEnt, TField>,
+        field_query: EntFieldPredicate<TField>,
     ) -> Self
     where
         (TEnt, TEdges): ContainsEnt<TAnyEnt, Index>,
