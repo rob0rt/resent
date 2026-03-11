@@ -6,7 +6,7 @@ use crate::{
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
 };
 use predicate::FieldPredicate;
-use sea_query::{Expr, SelectStatement};
+use sea_query::{Expr, ExprTrait, SelectStatement};
 
 #[derive(Debug)]
 pub enum EntLoadError {
@@ -46,8 +46,17 @@ impl<T> QueryContext<T> {
     }
 }
 
+struct JoinDef {
+    table: &'static str,
+    left_table: &'static str,
+    left_col: &'static str,
+    right_table: &'static str,
+    right_col: &'static str,
+}
+
 pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TOut> {
     filters: Vec<Expr>,
+    joins: Vec<JoinDef>,
     limit: Option<usize>,
     ctx: &'ctx QueryContext<Ctx>,
     _marker: std::marker::PhantomData<TOut>,
@@ -57,6 +66,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     pub fn new(ctx: &'ctx QueryContext<Ctx>) -> Self {
         Self {
             filters: Vec::new(),
+            joins: Vec::new(),
             limit: None,
             ctx,
             _marker: std::marker::PhantomData,
@@ -75,7 +85,31 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     where
         TOtherEnt: EntEdgeConfig<TEnt>,
     {
-        unimplemented!()
+        let ctx = self.ctx;
+        let mut subquery = sea_query::Query::select();
+        subquery
+            .column(sea_query::Alias::new(
+                <TOtherEnt as EntEdgeConfig<TEnt>>::TargetField::NAME,
+            ))
+            .from(sea_query::Alias::new(TEnt::TABLE_NAME));
+        for expr in self.filters {
+            subquery.and_where(expr);
+        }
+        if let Some(limit) = self.limit {
+            subquery.limit(limit as u64);
+        }
+        let filter = Expr::col((
+            TOtherEnt::TABLE_NAME,
+            <TOtherEnt as EntEdgeConfig<TEnt>>::SourceField::NAME,
+        ))
+        .in_subquery(subquery.to_owned());
+        EntQuery {
+            filters: vec![filter],
+            joins: Vec::new(),
+            limit: None,
+            ctx,
+            _marker: std::marker::PhantomData,
+        }
     }
 
     pub fn limit(mut self, limit: usize) -> Self {
@@ -88,7 +122,21 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     where
         TEnt: EntEdgeConfig<TOtherEnt>,
     {
-        unimplemented!()
+        let mut joins = self.joins;
+        joins.push(JoinDef {
+            table: TOtherEnt::TABLE_NAME,
+            left_table: TEnt::TABLE_NAME,
+            left_col: <TEnt as EntEdgeConfig<TOtherEnt>>::SourceField::NAME,
+            right_table: TOtherEnt::TABLE_NAME,
+            right_col: <TEnt as EntEdgeConfig<TOtherEnt>>::TargetField::NAME,
+        });
+        EntQuery {
+            filters: self.filters,
+            joins,
+            limit: self.limit,
+            ctx: self.ctx,
+            _marker: std::marker::PhantomData,
+        }
     }
 
     pub async fn load(self) -> Result<Vec<TEnt>, EntLoadError>
@@ -164,11 +212,21 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges
     where
         TEnt: EntEdgeConfig<TOtherEnt>,
     {
-        unimplemented!()
-    }
-
-    pub fn foo(self) -> EntWithEdges<TEnt, TEdges> {
-        unimplemented!()
+        let mut joins = self.joins;
+        joins.push(JoinDef {
+            table: TOtherEnt::TABLE_NAME,
+            left_table: TEnt::TABLE_NAME,
+            left_col: <TEnt as EntEdgeConfig<TOtherEnt>>::SourceField::NAME,
+            right_table: TOtherEnt::TABLE_NAME,
+            right_col: <TEnt as EntEdgeConfig<TOtherEnt>>::TargetField::NAME,
+        });
+        EntQuery {
+            filters: self.filters,
+            joins,
+            limit: self.limit,
+            ctx: self.ctx,
+            _marker: std::marker::PhantomData,
+        }
     }
 }
 
@@ -176,18 +234,25 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<(&'ctx QueryContext<Ctx>, sea_query
     for EntQuery<'ctx, Ctx, TEnt>
 {
     fn into(self) -> (&'ctx QueryContext<Ctx>, sea_query::SelectStatement) {
-        // use sea_query::{Asterisk, ExprTrait, IntoIden, Query};
         let mut query = sea_query::Query::select();
         query
             .column(sea_query::Asterisk)
             .from(sea_query::Alias::new(TEnt::TABLE_NAME));
+        for join in self.joins {
+            query.join(
+                sea_query::JoinType::InnerJoin,
+                sea_query::Alias::new(join.table),
+                Expr::col((join.left_table, join.left_col))
+                    .equals((join.right_table, join.right_col)),
+            );
+        }
         for expr in self.filters {
             query.and_where(expr);
         }
         if let Some(limit) = self.limit {
             query.limit(limit as u64);
         }
-        (self.ctx, query.to_owned())
+        (self.ctx, query)
     }
 }
 

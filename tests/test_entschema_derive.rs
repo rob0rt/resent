@@ -73,9 +73,9 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
     let q = EntBaz::query(&ctx)
         // .where_id(P::equals(Uuid::new_v4()))
         .join::<EntBar>()
-        .where_field::<ent_bar::Id, _>(P::equals(Uuid::new_v4()))
-        // .where_id(P::Equals(Uuid::new_v4()))
-        .foo();
+        .where_field::<ent_bar::Id, _>(P::equals(Uuid::new_v4()));
+    // .where_id(P::Equals(Uuid::new_v4()))
+    // .foo();
 
     let p = EntBar::query(&ctx)
         .query_edge::<EntBaz>()
