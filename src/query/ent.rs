@@ -61,11 +61,6 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         }
     }
 
-    pub fn limit(mut self, limit: usize) -> Self {
-        self.limit = Some(limit);
-        self
-    }
-
     pub fn order_by<TField: EntField<Ent = TEnt>>(mut self, dir: Order) -> Self {
         self.order = Some((TField::NAME.to_string(), dir));
         self

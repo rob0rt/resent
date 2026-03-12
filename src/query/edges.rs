@@ -1,3 +1,5 @@
+use sea_query::Order;
+
 use crate::{
     Ent, EntEdge,
     field::EntField,
@@ -34,6 +36,14 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges
         (TEnt, TEdges): ContainsEnt<TField::Ent, Index>,
     {
         self.filters.push(field_query.to_expr());
+        self
+    }
+
+    pub fn order_by<TField: EntField, Index>(mut self, dir: Order) -> Self
+    where
+        (TEnt, TEdges): ContainsEnt<TField::Ent, Index>,
+    {
+        self.order = Some((TField::NAME.to_string(), dir));
         self
     }
 

@@ -59,3 +59,10 @@ pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TOut> {
     ctx: &'ctx QueryContext<Ctx>,
     _marker: std::marker::PhantomData<TOut>,
 }
+
+impl<'ctx, Ctx: 'ctx + Sync, TOut> EntQuery<'ctx, Ctx, TOut> {
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+}
