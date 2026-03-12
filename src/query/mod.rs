@@ -6,7 +6,7 @@ use crate::{
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
 };
 use predicate::FieldPredicate;
-use sea_query::{Expr, ExprTrait, SelectStatement};
+use sea_query::{ColumnRef, Expr, ExprTrait, SelectStatement};
 
 #[derive(Debug)]
 pub enum EntLoadError {
@@ -54,10 +54,25 @@ struct JoinDef {
     right_col: &'static str,
 }
 
+pub enum Ordering {
+    Ascending,
+    Descending,
+}
+
+impl Into<sea_query::Order> for Ordering {
+    fn into(self) -> sea_query::Order {
+        match self {
+            Ordering::Ascending => sea_query::Order::Asc,
+            Ordering::Descending => sea_query::Order::Desc,
+        }
+    }
+}
+
 pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TOut> {
     filters: Vec<Expr>,
     joins: Vec<JoinDef>,
     limit: Option<usize>,
+    order: Option<(String, Ordering)>,
     ctx: &'ctx QueryContext<Ctx>,
     _marker: std::marker::PhantomData<TOut>,
 }
@@ -68,6 +83,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
             filters: Vec::new(),
             joins: Vec::new(),
             limit: None,
+            order: None,
             ctx,
             _marker: std::marker::PhantomData,
         }
@@ -107,6 +123,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
             filters: vec![filter],
             joins: Vec::new(),
             limit: None,
+            order: None,
             ctx,
             _marker: std::marker::PhantomData,
         }
@@ -114,6 +131,11 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
 
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
+        self
+    }
+
+    pub fn order_by<TField: EntField<Ent = TEnt>>(mut self, dir: Ordering) -> Self {
+        self.order = Some((TField::NAME.to_string(), dir));
         self
     }
 
@@ -134,6 +156,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
             filters: self.filters,
             joins,
             limit: self.limit,
+            order: self.order,
             ctx: self.ctx,
             _marker: std::marker::PhantomData,
         }
@@ -145,7 +168,8 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     {
         let query_policy = TEnt::query_policy();
 
-        let (ctx, select): (&QueryContext<Ctx>, SelectStatement) = self.into();
+        let ctx = self.ctx;
+        let select: sea_query::SelectStatement = self.into();
         let select_statement = select.to_string(sea_query::PostgresQueryBuilder);
 
         let conn = &ctx.conn;
@@ -224,16 +248,17 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges
             filters: self.filters,
             joins,
             limit: self.limit,
+            order: self.order,
             ctx: self.ctx,
             _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<(&'ctx QueryContext<Ctx>, sea_query::SelectStatement)>
+impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<sea_query::SelectStatement>
     for EntQuery<'ctx, Ctx, TEnt>
 {
-    fn into(self) -> (&'ctx QueryContext<Ctx>, sea_query::SelectStatement) {
+    fn into(self) -> sea_query::SelectStatement {
         let mut query = sea_query::Query::select();
         query
             .column(sea_query::Asterisk)
@@ -252,7 +277,10 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<(&'ctx QueryContext<Ctx>, sea_query
         if let Some(limit) = self.limit {
             query.limit(limit as u64);
         }
-        (self.ctx, query)
+        if let Some(order) = self.order {
+            query.order_by((TEnt::TABLE_NAME, order.0), order.1.into());
+        }
+        query
     }
 }
 
