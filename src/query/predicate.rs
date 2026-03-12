@@ -1,6 +1,10 @@
 use sea_query::{Expr, ExprTrait};
 
-use crate::{Ent, field::EntField};
+use crate::{
+    Ent,
+    field::EntField,
+    query::{EntQuery, projection::EntFieldProjection},
+};
 
 pub trait FieldPredicate<TField: EntField> {
     fn to_expr(self) -> Expr;
@@ -35,27 +39,40 @@ impl QueryPredicate {
         AfterPredicate(value)
     }
 
-    // pub fn is_in<TField: EntField, T: InFieldExpression<TField>>(
-    //     values: T,
-    // ) -> impl FieldPredicate<TField> {
-    //     // struct InPredicate<T: EntField>(Vec<T::Value>);
+    pub fn is_in<TField: EntField, T: InFieldExpression<TField>>(
+        values: T,
+    ) -> impl FieldPredicate<TField> {
+        struct InPredicate<TField: EntField, T: InFieldExpression<TField>>(
+            T,
+            std::marker::PhantomData<TField>,
+        );
 
-    //     // impl<T: EntField> FieldPredicate<T> for InPredicate<T> {
-    //     //     fn to_expr(self) -> Expr {
-    //     //         Expr::col(T::NAME).is_in(self.0)
-    //     //     }
-    //     // }
+        impl<TField: EntField, T: InFieldExpression<TField>> FieldPredicate<TField>
+            for InPredicate<TField, T>
+        {
+            fn to_expr(self) -> Expr {
+                self.0.is_in()
+            }
+        }
 
-    //     // InPredicate(values)
-    // }
+        InPredicate(values, std::marker::PhantomData)
+    }
 }
 
-trait InFieldExpression<TField: EntField> {
-    fn in_field(self, field: TField) -> Expr;
+pub trait InFieldExpression<TField: EntField> {
+    fn is_in(self) -> Expr;
 }
 
 impl<TField: EntField> InFieldExpression<TField> for Vec<TField::Value> {
-    fn in_field(self, field: TField) -> Expr {
+    fn is_in(self) -> Expr {
         Expr::col(TField::NAME).is_in(self)
+    }
+}
+
+impl<'ctx, Ctx: 'ctx + Sync, TField: EntField> InFieldExpression<TField>
+    for EntQuery<'ctx, Ctx, EntFieldProjection<TField>>
+{
+    fn is_in(self) -> Expr {
+        Expr::col(TField::NAME).in_subquery(self.into())
     }
 }
