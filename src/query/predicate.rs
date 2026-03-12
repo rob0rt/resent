@@ -69,8 +69,8 @@ impl<TField: EntField> InFieldExpression<TField> for Vec<TField::Value> {
     }
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TField: EntField> InFieldExpression<TField>
-    for EntQuery<'ctx, Ctx, EntFieldProjection<TField>>
+impl<'ctx, Ctx: 'ctx + Sync, TField: EntField, TProjectedField: EntField<Value = TField::Value>>
+    InFieldExpression<TField> for EntQuery<'ctx, Ctx, EntFieldProjection<TProjectedField>>
 {
     fn is_in(self) -> Expr {
         Expr::col(TField::NAME).in_subquery(self.into())

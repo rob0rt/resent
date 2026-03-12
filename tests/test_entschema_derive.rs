@@ -84,6 +84,8 @@ fn test_ent_schema_derive(pool: sqlx::PgPool) {
     let p = p
         .query_edge::<EntBar, _>(&ctx)
         .where_field::<ent_bar::Id>(P::equals(Uuid::new_v4()))
+        .where_field::<ent_bar::Id>(P::is_in(vec![Uuid::new_v4()]))
+        .where_field::<ent_bar::Id>(P::is_in(EntBaz::query(&ctx).select::<ent_baz::Id>()))
         .load_only()
         .await
         .unwrap();
