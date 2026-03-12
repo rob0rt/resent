@@ -87,7 +87,7 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     });
 
     quote! {
-        mod #mod_name {
+        pub mod #mod_name {
             use super::*;
 
             #(#field_structs)*
