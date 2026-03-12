@@ -1,5 +1,5 @@
 use resent::{
-    Ent, EntEdgeConfig, EntSchema,
+    Ent, EntEdge, EntSchema,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
     query::{QueryContext, predicate::QueryPredicate as P},
 };
@@ -61,7 +61,7 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBaz {
     }
 }
 
-impl EntEdgeConfig<EntBar> for EntBaz {
+impl EntEdge<EntBar> for EntBaz {
     type SourceField = ent_baz::Id;
     type TargetField = ent_bar::Id;
 }

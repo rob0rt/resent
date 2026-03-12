@@ -1,7 +1,7 @@
 pub mod predicate;
 
 use crate::{
-    Ent, EntEdgeConfig,
+    Ent, EntEdge,
     field::EntField,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
 };
@@ -99,13 +99,13 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
 
     pub fn query_edge<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, TOtherEnt>
     where
-        TOtherEnt: EntEdgeConfig<TEnt>,
+        TOtherEnt: EntEdge<TEnt>,
     {
         let ctx = self.ctx;
         let mut subquery = sea_query::Query::select();
         subquery
             .column(sea_query::Alias::new(
-                <TOtherEnt as EntEdgeConfig<TEnt>>::TargetField::NAME,
+                <TOtherEnt as EntEdge<TEnt>>::TargetField::NAME,
             ))
             .from(sea_query::Alias::new(TEnt::TABLE_NAME));
         for expr in self.filters {
@@ -116,7 +116,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         }
         let filter = Expr::col((
             TOtherEnt::TABLE_NAME,
-            <TOtherEnt as EntEdgeConfig<TEnt>>::SourceField::NAME,
+            <TOtherEnt as EntEdge<TEnt>>::SourceField::NAME,
         ))
         .in_subquery(subquery.to_owned());
         EntQuery {
@@ -142,15 +142,15 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     /// A join will include a related entity in the query output
     pub fn join<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, (TOtherEnt, ())>>
     where
-        TEnt: EntEdgeConfig<TOtherEnt>,
+        TEnt: EntEdge<TOtherEnt>,
     {
         let mut joins = self.joins;
         joins.push(JoinDef {
             table: TOtherEnt::TABLE_NAME,
             left_table: TEnt::TABLE_NAME,
-            left_col: <TEnt as EntEdgeConfig<TOtherEnt>>::SourceField::NAME,
+            left_col: <TEnt as EntEdge<TOtherEnt>>::SourceField::NAME,
             right_table: TOtherEnt::TABLE_NAME,
-            right_col: <TEnt as EntEdgeConfig<TOtherEnt>>::TargetField::NAME,
+            right_col: <TEnt as EntEdge<TOtherEnt>>::TargetField::NAME,
         });
         EntQuery {
             filters: self.filters,
@@ -234,15 +234,15 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges
         self,
     ) -> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, (TOtherEnt, TEdges)>>
     where
-        TEnt: EntEdgeConfig<TOtherEnt>,
+        TEnt: EntEdge<TOtherEnt>,
     {
         let mut joins = self.joins;
         joins.push(JoinDef {
             table: TOtherEnt::TABLE_NAME,
             left_table: TEnt::TABLE_NAME,
-            left_col: <TEnt as EntEdgeConfig<TOtherEnt>>::SourceField::NAME,
+            left_col: <TEnt as EntEdge<TOtherEnt>>::SourceField::NAME,
             right_table: TOtherEnt::TABLE_NAME,
-            right_col: <TEnt as EntEdgeConfig<TOtherEnt>>::TargetField::NAME,
+            right_col: <TEnt as EntEdge<TOtherEnt>>::TargetField::NAME,
         });
         EntQuery {
             filters: self.filters,

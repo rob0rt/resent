@@ -26,7 +26,7 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
         context: &'ctx QueryContext<Ctx>,
     ) -> impl std::future::Future<Output = Result<TOtherEnt, EntLoadOnlyError>> + Send
     where
-        Self: EntEdgeConfig<TOtherEnt>,
+        Self: EntEdge<TOtherEnt>,
         TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
         self.query_edge(context).load_only()
@@ -38,7 +38,7 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
         context: &'ctx QueryContext<Ctx>,
     ) -> EntQuery<'ctx, Ctx, TOtherEnt>
     where
-        Self: EntEdgeConfig<TOtherEnt>,
+        Self: EntEdge<TOtherEnt>,
         TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
         let query = EntQuery::<_, TOtherEnt>::new(context);
@@ -52,7 +52,7 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
         context: &'ctx QueryContext<Ctx>,
     ) -> EntQuery<'ctx, Ctx, TOtherEnt>
     where
-        TOtherEnt: EntEdgeConfig<Self>,
+        TOtherEnt: EntEdge<Self>,
         TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
         let query = EntQuery::<_, TOtherEnt>::new(context);
@@ -62,7 +62,7 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     }
 }
 
-pub trait EntEdgeConfig<TTarget: Ent>
+pub trait EntEdge<TTarget: Ent>
 where
     Self: Ent,
 {
