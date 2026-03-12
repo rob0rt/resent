@@ -25,6 +25,18 @@ impl QueryPredicate {
         EqualsPredicate(value)
     }
 
+    pub fn not<T: EntField>(predicate: impl FieldPredicate<T>) -> impl FieldPredicate<T> {
+        struct NotPredicate(Expr);
+
+        impl<T: EntField> FieldPredicate<T> for NotPredicate {
+            fn to_expr(self) -> Expr {
+                self.0.not()
+            }
+        }
+
+        NotPredicate(predicate.to_expr())
+    }
+
     pub fn after<T: EntField<Value = chrono::NaiveDateTime>>(
         value: chrono::NaiveDateTime,
     ) -> impl FieldPredicate<T> {
