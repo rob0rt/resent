@@ -4,7 +4,4 @@ pub struct EntFieldProjection<TField: EntField> {
     field: std::marker::PhantomData<TField>,
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TField: EntField<Ent = TEnt>>
-    EntQuery<'ctx, Ctx, EntFieldProjection<TField>>
-{
-}
+impl<TEnt: Ent, TField: EntField<Ent = TEnt>> EntQuery<EntFieldProjection<TField>> {}

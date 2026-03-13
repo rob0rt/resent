@@ -69,17 +69,15 @@ impl EntEdge<EntBar> for EntBaz {
 // #[sqlx::test]
 #[tokio::test]
 async fn test_ent_schema_derive() {
-    let pool = sqlx::PgPool::connect_lazy("postgresql://").unwrap();
-    let ctx = QueryContext::new(pool, ());
     let uuid = Uuid::new_v4();
 
-    let select: sea_query::SelectStatement = EntBaz::query(&ctx).into();
+    let select: sea_query::SelectStatement = EntBaz::query().into();
     assert_eq!(
         select.to_string(sea_query::PostgresQueryBuilder),
         r#"SELECT * FROM "baz""#
     );
 
-    let select: sea_query::SelectStatement = EntBaz::query(&ctx)
+    let select: sea_query::SelectStatement = EntBaz::query()
         .order_by::<ent_baz::Id>(sea_query::Order::Desc)
         .into();
     assert_eq!(
@@ -87,7 +85,7 @@ async fn test_ent_schema_derive() {
         r#"SELECT * FROM "baz" ORDER BY "baz"."id" DESC"#
     );
 
-    let select: sea_query::SelectStatement = EntBaz::query(&ctx)
+    let select: sea_query::SelectStatement = EntBaz::query()
         .where_field::<ent_baz::Id>(P::equals(uuid))
         .into();
     assert_eq!(
@@ -95,13 +93,13 @@ async fn test_ent_schema_derive() {
         format!(r#"SELECT * FROM "baz" WHERE "baz"."id" = '{}'"#, uuid),
     );
 
-    let select: sea_query::SelectStatement = EntBaz::query(&ctx).limit(2).into();
+    let select: sea_query::SelectStatement = EntBaz::query().limit(2).into();
     assert_eq!(
         select.to_string(sea_query::PostgresQueryBuilder),
         r#"SELECT * FROM "baz" LIMIT 2"#
     );
 
-    let select: sea_query::SelectStatement = EntBar::query(&ctx)
+    let select: sea_query::SelectStatement = EntBar::query()
         .query_edge::<EntBaz>()
         .where_field::<ent_baz::Id>(P::equals(uuid))
         .into();
@@ -110,7 +108,7 @@ async fn test_ent_schema_derive() {
         format!(r#"SELECT * FROM "baz" WHERE "baz"."id" = '{}'"#, uuid),
     );
 
-    let select: sea_query::SelectStatement = EntBar::query(&ctx)
+    let select: sea_query::SelectStatement = EntBar::query()
         .where_field::<ent_bar::Value>(P::equals("hello".to_string()))
         .query_edge::<EntBaz>()
         .where_field::<ent_baz::Id>(P::equals(uuid))
@@ -123,13 +121,13 @@ async fn test_ent_schema_derive() {
         ),
     );
 
-    let select: sea_query::SelectStatement = EntBaz::query(&ctx).join::<EntBar>().into();
+    let select: sea_query::SelectStatement = EntBaz::query().join::<EntBar>().into();
     assert_eq!(
         select.to_string(sea_query::PostgresQueryBuilder),
         r#"SELECT * FROM "baz" INNER JOIN "bar" ON "baz"."id" = "bar"."id""#
     );
 
-    let select: sea_query::SelectStatement = EntBaz::query(&ctx)
+    let select: sea_query::SelectStatement = EntBaz::query()
         .join::<EntBar>()
         .where_field::<ent_bar::Value, _>(P::equals("hello".to_string()))
         .into();
@@ -138,7 +136,7 @@ async fn test_ent_schema_derive() {
         r#"SELECT * FROM "baz" INNER JOIN "bar" ON "baz"."id" = "bar"."id" WHERE "bar"."value" = 'hello'"#
     );
 
-    let select: sea_query::SelectStatement = EntBaz::query(&ctx)
+    let select: sea_query::SelectStatement = EntBaz::query()
         .join::<EntBar>()
         .where_field::<ent_bar::Value, _>(P::equals("hello".to_string()))
         .where_field::<ent_baz::Id, _>(P::equals(uuid))
@@ -151,7 +149,7 @@ async fn test_ent_schema_derive() {
         )
     );
 
-    let select: sea_query::SelectStatement = EntBaz::query(&ctx)
+    let select: sea_query::SelectStatement = EntBaz::query()
         .join::<EntBar>()
         .where_field::<ent_bar::Value, _>(P::equals("hello".to_string()))
         .where_field::<ent_baz::Id, _>(P::equals(uuid))

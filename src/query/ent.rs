@@ -11,14 +11,13 @@ use crate::{
 };
 use sea_query::Order;
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
-    pub fn new(ctx: &'ctx QueryContext<Ctx>) -> Self {
+impl<TEnt: Ent> EntQuery<TEnt> {
+    pub fn new() -> Self {
         Self {
             filters: Vec::new(),
             joins: Vec::new(),
             limit: None,
             order: None,
-            ctx,
             _marker: std::marker::PhantomData,
         }
     }
@@ -31,11 +30,10 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         self
     }
 
-    pub fn query_edge<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, TOtherEnt>
+    pub fn query_edge<TOtherEnt: Ent>(self) -> EntQuery<TOtherEnt>
     where
         TOtherEnt: EntEdge<TEnt>,
     {
-        let ctx = self.ctx;
         let filters = if !self.filters.is_empty() || self.limit.is_some() || !self.joins.is_empty()
         {
             vec![
@@ -53,7 +51,6 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
             joins: Vec::new(),
             limit: None,
             order: None,
-            ctx,
             _marker: std::marker::PhantomData,
         }
     }
@@ -63,21 +60,18 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         self
     }
 
-    pub fn select<TField: EntField<Ent = TEnt>>(
-        self,
-    ) -> EntQuery<'ctx, Ctx, EntFieldProjection<TField>> {
+    pub fn select<TField: EntField<Ent = TEnt>>(self) -> EntQuery<EntFieldProjection<TField>> {
         EntQuery {
             filters: self.filters,
             joins: self.joins,
             limit: self.limit,
             order: self.order,
-            ctx: self.ctx,
             _marker: std::marker::PhantomData,
         }
     }
 
     /// A join will include a related entity in the query output
-    pub fn join<TOtherEnt: Ent>(self) -> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, (TOtherEnt, ())>>
+    pub fn join<TOtherEnt: Ent>(self) -> EntQuery<EntWithEdges<TEnt, (TOtherEnt, ())>>
     where
         TEnt: EntEdge<TOtherEnt>,
     {
@@ -94,18 +88,20 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
             joins,
             limit: self.limit,
             order: self.order,
-            ctx: self.ctx,
             _marker: std::marker::PhantomData,
         }
     }
 
-    pub async fn load(self) -> Result<Vec<TEnt>, EntLoadError>
+    pub async fn load<'ctx, Ctx: 'ctx + Sync>(
+        self,
+        ctx: &'ctx QueryContext<Ctx>,
+    ) -> Result<Vec<TEnt>, EntLoadError>
     where
         TEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
         let query_policy = TEnt::query_policy();
 
-        let ctx = self.ctx;
+        let ctx = ctx;
         let select: sea_query::SelectStatement = self.into();
         let select_statement = select.to_string(sea_query::PostgresQueryBuilder);
 
@@ -142,11 +138,14 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     }
 
     /// Loads a single entity, returning an error if there are zero or more than one results.
-    pub async fn load_only(self) -> Result<TEnt, EntLoadOnlyError>
+    pub async fn only<'ctx, Ctx: 'ctx + Sync>(
+        self,
+        ctx: &'ctx QueryContext<Ctx>,
+    ) -> Result<TEnt, EntLoadOnlyError>
     where
         TEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        let mut results = self.limit(2).load().await?;
+        let mut results = self.limit(2).load(ctx).await?;
         match results.len() {
             0 => Err(EntLoadOnlyError::NoResults),
             1 => Ok(results.remove(0)),
@@ -155,11 +154,14 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     }
 
     /// Loads the first result, returning None if there are no results. Will not return an error if there are multiple results.
-    pub async fn first(self) -> Result<Option<TEnt>, EntLoadError>
+    pub async fn first<'ctx, Ctx: 'ctx + Sync>(
+        self,
+        ctx: &'ctx QueryContext<Ctx>,
+    ) -> Result<Option<TEnt>, EntLoadError>
     where
         TEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        let mut results = self.limit(1).load().await?;
+        let mut results = self.limit(1).load(ctx).await?;
         Ok(results.pop())
     }
 }

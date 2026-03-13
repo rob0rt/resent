@@ -27,7 +27,7 @@ impl<E, Edges> std::ops::Deref for EntWithEdges<E, Edges> {
     }
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, TEdges>> {
+impl<TEnt: Ent, TEdges> EntQuery<EntWithEdges<TEnt, TEdges>> {
     pub fn where_field<TField: EntField, Index>(
         mut self,
         field_query: impl FieldPredicate<TField>,
@@ -47,9 +47,7 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges
         self
     }
 
-    pub fn join<TOtherEnt: Ent>(
-        self,
-    ) -> EntQuery<'ctx, Ctx, EntWithEdges<TEnt, (TOtherEnt, TEdges)>>
+    pub fn join<TOtherEnt: Ent>(self) -> EntQuery<EntWithEdges<TEnt, (TOtherEnt, TEdges)>>
     where
         TEnt: EntEdge<TOtherEnt>,
     {
@@ -66,7 +64,6 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, TEdges> EntQuery<'ctx, Ctx, EntWithEdges
             joins,
             limit: self.limit,
             order: self.order,
-            ctx: self.ctx,
             _marker: std::marker::PhantomData,
         }
     }

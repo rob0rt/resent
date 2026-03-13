@@ -13,11 +13,8 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     const TABLE_NAME: &'static str;
 
     /// Start an EntQuery for this entity type.
-    fn query<'ctx, Ctx: 'ctx + Sync>(context: &'ctx QueryContext<Ctx>) -> EntQuery<'ctx, Ctx, Self>
-    where
-        Self: EntPrivacyPolicy<'ctx, Ctx>,
-    {
-        EntQuery::new(context)
+    fn query() -> EntQuery<Self> {
+        EntQuery::new()
     }
 
     /// Load a related entity via an edge.
@@ -29,33 +26,25 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
         Self: EntEdge<TOtherEnt>,
         TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        self.query_edge(context).load_only()
+        self.query_edge().only(context)
     }
 
     /// Create an EntQuery for an edge, but don't execute it - this is useful for building up more complex queries that involve edges.
-    fn query_edge<'ctx, TOtherEnt: Ent, Ctx: 'ctx + Sync>(
-        &self,
-        context: &'ctx QueryContext<Ctx>,
-    ) -> EntQuery<'ctx, Ctx, TOtherEnt>
+    fn query_edge<TOtherEnt: Ent>(&self) -> EntQuery<TOtherEnt>
     where
         Self: EntEdge<TOtherEnt>,
-        TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        let query = EntQuery::<_, TOtherEnt>::new(context);
+        let query = EntQuery::<TOtherEnt>::new();
         query
             .where_field::<Self::TargetField>(P::equals(Self::SourceField::get_value(self).clone()))
     }
 
     /// Create an EntQuery for an inbound edge (edge reference)
-    fn query_edge_ref<'ctx, TOtherEnt: Ent, Ctx: 'ctx + Sync>(
-        &self,
-        context: &'ctx QueryContext<Ctx>,
-    ) -> EntQuery<'ctx, Ctx, TOtherEnt>
+    fn query_edge_ref<TOtherEnt: Ent>(&self) -> EntQuery<TOtherEnt>
     where
         TOtherEnt: EntEdge<Self>,
-        TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        let query = EntQuery::<_, TOtherEnt>::new(context);
+        let query = EntQuery::<TOtherEnt>::new();
         query.where_field::<TOtherEnt::SourceField>(P::equals(
             TOtherEnt::TargetField::get_value(self).clone(),
         ))

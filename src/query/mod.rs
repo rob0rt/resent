@@ -57,16 +57,15 @@ struct JoinDef {
     right_col: &'static str,
 }
 
-pub struct EntQuery<'ctx, Ctx: 'ctx + Sync, TOut> {
+pub struct EntQuery<TOut> {
     filters: Vec<Expr>,
     joins: Vec<JoinDef>,
     limit: Option<usize>,
     order: Option<(String, Order)>,
-    ctx: &'ctx QueryContext<Ctx>,
     _marker: std::marker::PhantomData<TOut>,
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TOut> EntQuery<'ctx, Ctx, TOut> {
+impl<TOut> EntQuery<TOut> {
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
         self
@@ -89,8 +88,8 @@ impl<TEnt: Ent, TField: EntField<Ent = TEnt>> EntTarget for EntFieldProjection<T
     type Target = TEnt;
 }
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent, Target: EntTarget<Target = TEnt>>
-    Into<sea_query::SelectStatement> for EntQuery<'ctx, Ctx, Target>
+impl<TEnt: Ent, Target: EntTarget<Target = TEnt>> Into<sea_query::SelectStatement>
+    for EntQuery<Target>
 {
     fn into(self) -> sea_query::SelectStatement {
         let mut query = sea_query::Query::select();
