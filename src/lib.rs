@@ -34,8 +34,7 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     where
         Self: EntEdge<TOtherEnt>,
     {
-        let query = EntQuery::<TOtherEnt>::new();
-        query
+        EntQuery::<TOtherEnt>::new()
             .where_field::<Self::TargetField>(P::equals(Self::SourceField::get_value(self).clone()))
     }
 
@@ -44,8 +43,7 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     where
         TOtherEnt: EntEdge<Self>,
     {
-        let query = EntQuery::<TOtherEnt>::new();
-        query.where_field::<TOtherEnt::SourceField>(P::equals(
+        EntQuery::<TOtherEnt>::new().where_field::<TOtherEnt::SourceField>(P::equals(
             TOtherEnt::TargetField::get_value(self).clone(),
         ))
     }

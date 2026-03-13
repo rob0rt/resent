@@ -116,7 +116,7 @@ async fn test_ent_schema_derive() {
     assert_eq!(
         select.to_string(sea_query::PostgresQueryBuilder),
         format!(
-            r#"SELECT * FROM "baz" WHERE "baz"."id" IN (SELECT * FROM "bar" WHERE "bar"."value" = 'hello') AND "baz"."id" = '{}'"#,
+            r#"SELECT * FROM "baz" WHERE "baz"."id" IN (SELECT "bar"."id" FROM "bar" WHERE "bar"."value" = 'hello') AND "baz"."id" = '{}'"#,
             uuid
         ),
     );

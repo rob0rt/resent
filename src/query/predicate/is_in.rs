@@ -24,7 +24,11 @@ impl<TField: EntField, TProjectedField: EntField<Value = TField::Value>> InField
     for EntQuery<EntFieldProjection<TProjectedField>>
 {
     fn is_in(self) -> Expr {
-        Expr::col((TField::Ent::TABLE_NAME, TField::NAME)).in_subquery(self.into())
+        let mut select: sea_query::SelectStatement = self.into();
+        select
+            .clear_selects()
+            .column((TProjectedField::Ent::TABLE_NAME, TProjectedField::NAME));
+        Expr::col((TField::Ent::TABLE_NAME, TField::NAME)).in_subquery(select)
     }
 }
 
