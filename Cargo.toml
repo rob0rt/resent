@@ -12,6 +12,13 @@ sqlx = { version = "0.8.6", features = ["postgres", "uuid", "chrono"] }
 
 [dev-dependencies]
 uuid = { version = "1.3.0", features = ["v4"] }
+sqlx = { version = "0.8.6", features = [
+    "postgres",
+    "uuid",
+    "chrono",
+    "runtime-tokio-native-tls",
+] }
+tokio = { version = "1.28.2", features = ["full"] }
 
 [workspace]
 resolver = "3"

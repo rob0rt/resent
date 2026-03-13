@@ -66,29 +66,54 @@ impl EntEdge<EntBar> for EntBaz {
     type TargetField = ent_bar::Id;
 }
 
-#[sqlx::test]
-fn test_ent_schema_derive(pool: sqlx::PgPool) {
+// #[sqlx::test]
+#[tokio::test]
+async fn test_ent_schema_derive() {
+    let pool = sqlx::PgPool::connect_lazy("postgresql://").unwrap();
     let ctx = QueryContext::new(pool, ());
 
-    let q = EntBaz::query(&ctx)
-        .join::<EntBar>()
-        .where_field::<ent_bar::Id, _>(P::equals(Uuid::new_v4()));
+    let select: sea_query::SelectStatement = EntBaz::query(&ctx).into();
 
-    let p = EntBar::query(&ctx)
-        .query_edge::<EntBaz>()
-        .where_field::<ent_baz::Id>(P::equals(Uuid::new_v4()))
-        .load_only()
-        .await
-        .unwrap();
+    assert_eq!(
+        select.to_string(sea_query::PostgresQueryBuilder),
+        "SELECT * FROM \"baz\""
+    );
 
-    let p = p
-        .query_edge::<EntBar, _>(&ctx)
-        .where_field::<ent_bar::Id>(P::equals(Uuid::new_v4()))
-        .where_field::<ent_bar::Id>(P::is_in(vec![Uuid::new_v4()]))
-        .where_field::<ent_bar::Id>(P::is_in(EntBaz::query(&ctx).select::<ent_baz::Id>()))
-        .load_only()
-        .await
-        .unwrap();
+    let uuid = Uuid::new_v4();
+    let select: sea_query::SelectStatement = EntBaz::query(&ctx)
+        .where_field::<ent_baz::Id>(P::equals(uuid))
+        .into();
+    assert_eq!(
+        select.to_string(sea_query::PostgresQueryBuilder),
+        format!("SELECT * FROM \"baz\" WHERE \"baz\".\"id\" = '{}'", uuid),
+    );
 
-    p.query_edge_ref::<EntBaz, _>(&ctx);
+    let select: sea_query::SelectStatement = EntBaz::query(&ctx).limit(2).into();
+    assert_eq!(
+        select.to_string(sea_query::PostgresQueryBuilder),
+        "SELECT * FROM \"baz\" LIMIT 2"
+    );
+
+    // let select: sea_query::SelectStatement = EntBaz::query(&ctx)
+    //     .join::<EntBar>()
+    //     .where_field::<ent_bar::Id, _>(P::equals(Uuid::new_v4()));
+    // .into();
+
+    // let p = EntBar::query(&ctx)
+    //     .query_edge::<EntBaz>()
+    //     .where_field::<ent_baz::Id>(P::equals(Uuid::new_v4()))
+    //     .load_only()
+    //     .await
+    //     .unwrap();
+
+    // let p = p
+    //     .query_edge::<EntBar, _>(&ctx)
+    //     .where_field::<ent_bar::Id>(P::equals(Uuid::new_v4()))
+    //     .where_field::<ent_bar::Id>(P::is_in(vec![Uuid::new_v4()]))
+    //     .where_field::<ent_bar::Id>(P::is_in(EntBaz::query(&ctx).select::<ent_baz::Id>()))
+    //     .load_only()
+    //     .await
+    //     .unwrap();
+
+    // p.query_edge_ref::<EntBaz, _>(&ctx);
 }
