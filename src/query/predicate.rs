@@ -77,7 +77,7 @@ pub trait InFieldExpression<TField: EntField> {
 
 impl<TField: EntField> InFieldExpression<TField> for Vec<TField::Value> {
     fn is_in(self) -> Expr {
-        Expr::col(TField::NAME).is_in(self)
+        Expr::col((TField::Ent::TABLE_NAME, TField::NAME)).is_in(self)
     }
 }
 
@@ -85,6 +85,6 @@ impl<'ctx, Ctx: 'ctx + Sync, TField: EntField, TProjectedField: EntField<Value =
     InFieldExpression<TField> for EntQuery<'ctx, Ctx, EntFieldProjection<TProjectedField>>
 {
     fn is_in(self) -> Expr {
-        Expr::col(TField::NAME).in_subquery(self.into())
+        Expr::col((TField::Ent::TABLE_NAME, TField::NAME)).in_subquery(self.into())
     }
 }

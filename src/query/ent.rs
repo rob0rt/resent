@@ -3,11 +3,13 @@ use crate::{
     field::EntField,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
     query::{
-        EntLoadError, EntLoadOnlyError, EntQuery, JoinDef, QueryContext, edges::EntWithEdges,
-        predicate::FieldPredicate, projection::EntFieldProjection,
+        EntLoadError, EntLoadOnlyError, EntQuery, JoinDef, QueryContext,
+        edges::EntWithEdges,
+        predicate::{FieldPredicate, QueryPredicate},
+        projection::EntFieldProjection,
     },
 };
-use sea_query::{Expr, ExprTrait, Order};
+use sea_query::Order;
 
 impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
     pub fn new(ctx: &'ctx QueryContext<Ctx>) -> Self {
@@ -34,25 +36,20 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
         TOtherEnt: EntEdge<TEnt>,
     {
         let ctx = self.ctx;
-        let mut subquery = sea_query::Query::select();
-        subquery
-            .column(sea_query::Alias::new(
-                <TOtherEnt as EntEdge<TEnt>>::TargetField::NAME,
-            ))
-            .from(sea_query::Alias::new(TEnt::TABLE_NAME));
-        for expr in self.filters {
-            subquery.and_where(expr);
-        }
-        if let Some(limit) = self.limit {
-            subquery.limit(limit as u64);
-        }
-        let filter = Expr::col((
-            TOtherEnt::TABLE_NAME,
-            <TOtherEnt as EntEdge<TEnt>>::SourceField::NAME,
-        ))
-        .in_subquery(subquery.to_owned());
+        let filters = if !self.filters.is_empty() || self.limit.is_some() || !self.joins.is_empty()
+        {
+            vec![
+                QueryPredicate::is_in::<TOtherEnt::SourceField, _>(
+                    self.select::<TOtherEnt::TargetField>(),
+                )
+                .to_expr(),
+            ]
+        } else {
+            // Optimization: if the current query has no filters, joins, or limits, we can skip the subquery and just query directly on the edge table
+            vec![]
+        };
         EntQuery {
-            filters: vec![filter],
+            filters: filters,
             joins: Vec::new(),
             limit: None,
             order: None,
@@ -156,33 +153,13 @@ impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> EntQuery<'ctx, Ctx, TEnt> {
             _ => Err(EntLoadOnlyError::TooManyResults),
         }
     }
-}
 
-impl<'ctx, Ctx: 'ctx + Sync, TEnt: Ent> Into<sea_query::SelectStatement>
-    for EntQuery<'ctx, Ctx, TEnt>
-{
-    fn into(self) -> sea_query::SelectStatement {
-        let mut query = sea_query::Query::select();
-        query
-            .column(sea_query::Asterisk)
-            .from(sea_query::Alias::new(TEnt::TABLE_NAME));
-        for join in self.joins {
-            query.join(
-                sea_query::JoinType::InnerJoin,
-                sea_query::Alias::new(join.table),
-                Expr::col((join.left_table, join.left_col))
-                    .equals((join.right_table, join.right_col)),
-            );
-        }
-        for expr in self.filters {
-            query.and_where(expr);
-        }
-        if let Some(limit) = self.limit {
-            query.limit(limit as u64);
-        }
-        if let Some(order) = self.order {
-            query.order_by((TEnt::TABLE_NAME, order.0), order.1.into());
-        }
-        query
+    /// Loads the first result, returning None if there are no results. Will not return an error if there are multiple results.
+    pub async fn first(self) -> Result<Option<TEnt>, EntLoadError>
+    where
+        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+    {
+        let mut results = self.limit(1).load().await?;
+        Ok(results.pop())
     }
 }

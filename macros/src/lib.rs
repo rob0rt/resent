@@ -1,8 +1,8 @@
 use convert_case::{Case, Casing};
-use darling::{FromDeriveInput, FromField, FromMeta, ast::NestedMeta, usage::IdentSet};
+use darling::{FromDeriveInput, FromField};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Ident, parse_macro_input};
+use syn::parse_macro_input;
 
 // ---------------------------------------------------------------------------
 // Attribute parsing
