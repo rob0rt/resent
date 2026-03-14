@@ -69,9 +69,9 @@ impl<TEnt: Ent, TEdges> EntQuery<EntWithEdges<TEnt, TEdges>> {
     }
 
     /// Downcast the query to a specific entity type, as long as the new entity is contained in the edges.
-    pub fn downcast<TTarget: Ent>(self) -> EntQuery<TTarget>
+    pub fn downcast<TTarget: Ent, Index>(self) -> EntQuery<TTarget>
     where
-        (TEnt, TEdges): ContainsEnt<TTarget, Here>,
+        (TEnt, TEdges): ContainsEnt<TTarget, Index>,
     {
         EntQuery {
             filters: self.filters,
