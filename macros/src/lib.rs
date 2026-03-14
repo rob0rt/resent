@@ -16,16 +16,20 @@ struct EntSchemaArgs {
 
 /// Minimal field info collected by darling.
 #[derive(Debug, Clone, FromField)]
+#[darling(attributes(field))]
 struct EntStructField {
     ident: Option<syn::Ident>,
     ty: syn::Type,
+
+    #[darling(default)]
+    readonly: bool,
 }
 
 // ---------------------------------------------------------------------------
 // Proc macro entry point
 // ---------------------------------------------------------------------------
 
-#[proc_macro_derive(EntSchema, attributes(entschema, edge))]
+#[proc_macro_derive(EntSchema, attributes(entschema, edge, field))]
 pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::DeriveInput);
 
@@ -117,6 +121,11 @@ impl EntStructField {
         let struct_name = self.struct_name();
         let field_name = ident.to_string();
         let field_type = &self.ty;
+        let visibility = if self.readonly {
+            quote! { resent::field::ReadOnly }
+        } else {
+            quote! { resent::field::ReadWrite }
+        };
         quote! {
             pub struct #struct_name;
 
@@ -124,7 +133,7 @@ impl EntStructField {
                 const NAME: &'static str = #field_name;
                 type Value = #field_type;
                 type Ent = #ent_name;
-                type Visibility = resent::field::ReadWrite;
+                type Visibility = #visibility;
 
                 fn get_value(ent: &Self::Ent) -> &Self::Value {
                     &ent.#ident

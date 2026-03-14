@@ -75,13 +75,14 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
 
 #[cfg(test)]
 mod tests {
-    use crate as resent;
+    use crate::{self as resent, mutator};
 
     use super::*;
 
     #[derive(resent::EntSchema)]
     #[entschema(table = "test_ent")]
     pub struct TestEnt {
+        #[field(readonly)]
         id: i32,
         value: String,
     }
@@ -95,15 +96,16 @@ mod tests {
 
         let mut mutator = ent.mutate();
         assert_eq!(mutator.get::<test_ent::Id>().old, &1);
-        assert_eq!(mutator.get::<test_ent::Value>().old, &"hello".to_string());
 
         mutator.set::<test_ent::Value>("world".to_string());
+        assert_eq!(mutator.get::<test_ent::Value>().old, "hello");
         match mutator.get::<test_ent::Value>().new {
             EntMutationFieldState::Set(new_value) => assert_eq!(new_value, "world"),
             _ => panic!("Expected ValueField to be set"),
         }
 
         mutator.unset::<test_ent::Value>();
+        assert_eq!(mutator.get::<test_ent::Value>().old, "hello");
         match mutator.get::<test_ent::Value>().new {
             EntMutationFieldState::Unset => (),
             _ => panic!("Expected ValueField to be unset"),
