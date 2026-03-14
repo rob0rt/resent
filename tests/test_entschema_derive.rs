@@ -11,6 +11,7 @@ type EntCtx = ();
 #[entschema(table = "foo")]
 #[allow(dead_code)]
 pub struct EntFoo {
+    #[field(primary_key)]
     id: Uuid,
     name: String,
     bar_id: Uuid,
@@ -30,6 +31,7 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntFoo {
 #[entschema(table = "bar")]
 #[allow(dead_code)]
 pub struct EntBar {
+    #[field(primary_key)]
     id: Uuid,
     value: String,
 }
@@ -48,6 +50,7 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBar {
 #[entschema(table = "baz")]
 #[allow(dead_code)]
 pub struct EntBaz {
+    #[field(primary_key)]
     id: Uuid,
 }
 

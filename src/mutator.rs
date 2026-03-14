@@ -1,13 +1,20 @@
 use std::collections::HashMap;
 
+use sea_query::{Expr, Query};
+use sea_query_sqlx::SqlxBinder;
+
 use crate::{
     Ent,
     field::{EntField, ReadWrite},
+    primary_key::EntPrimaryKey,
+    privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
+    query::{EntLoadOnlyError, QueryContext},
 };
 
 pub enum EntMutationError {
     DatabaseError(sqlx::Error),
     PrivacyPolicyDenied,
+    EntLoadError(EntLoadOnlyError),
 }
 
 pub enum EntMutationFieldState<'a, TField: EntField> {
@@ -26,7 +33,11 @@ pub struct EntMutationField<'a, TField: EntField> {
 
 pub struct EntMutator<'a, TEnt: Ent> {
     ent: &'a TEnt,
-    field_mutations: HashMap<String, Box<dyn std::any::Any>>,
+
+    /// Maps field (column) names to the new value and the corresponding sea-query expression for that value.
+    /// We store the new value as a boxed `Any` so that we can downcast it back to the correct type when inspecting the mutation.
+    /// The sea-query expression is stored separately so that we can generate the SQL update statement without needing to know the concrete type of the value at that point.
+    field_mutations: HashMap<String, (Box<dyn std::any::Any>, Expr)>,
 }
 
 impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
@@ -41,8 +52,9 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
         &mut self,
         new_value: TField::Value,
     ) {
+        let expr = new_value.clone().into();
         self.field_mutations
-            .insert(TField::NAME.to_string(), Box::new(new_value));
+            .insert(TField::NAME.to_string(), (Box::new(new_value), expr));
     }
 
     pub fn unset<TField: EntField<Ent = TEnt, Visibility = ReadWrite>>(&mut self) {
@@ -53,7 +65,7 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
         EntMutationField {
             old: TField::get_value(self.ent),
             new: match self.field_mutations.get(TField::NAME) {
-                Some(boxed_value) => {
+                Some((boxed_value, _)) => {
                     let new_value = boxed_value.downcast_ref::<TField::Value>().unwrap();
                     EntMutationFieldState::Set(new_value)
                 }
@@ -62,33 +74,76 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
         }
     }
 
-    // async fn apply<'ctx, Ctx: 'ctx + Sync>(
-    //     self,
-    //     ctx: &'ctx QueryContext<Ctx>,
-    // ) -> Result<TEnt, EntMutationError>
-    // where
-    //     TEnt: EntPrivacyPolicy<'ctx, Ctx>,
-    // {
-    //     // for (field_name, boxed_value) in self.field_mutations {}
-    // }
+    async fn apply<'ctx, Ctx: 'ctx + Sync>(
+        self,
+        ctx: &'ctx QueryContext<Ctx>,
+    ) -> Result<TEnt, EntMutationError>
+    where
+        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+    {
+        // Get the primary key value of the entity being mutated - we'll need this to reload the entity after the mutation is applied.
+        let primary_key = TEnt::PrimaryKey::get_value(self.ent);
+
+        // Check privacy policy
+        let policies = TEnt::mutation_policy();
+        for policy in policies {
+            match policy.evaluation(ctx, &self.ent).await {
+                PrivacyRuleOutcome::Allow => (),
+                PrivacyRuleOutcome::Deny => return Err(EntMutationError::PrivacyPolicyDenied),
+                PrivacyRuleOutcome::Skip => continue,
+            }
+        }
+
+        // Generate and execute the update statement
+        let update_stmt: sea_query::UpdateStatement = self.into();
+        let (sql, args) = update_stmt.build_sqlx(sea_query::PostgresQueryBuilder);
+
+        // Execute the update
+        sqlx::query_with(&sql, args)
+            .execute(&ctx.conn)
+            .await
+            .map_err(EntMutationError::DatabaseError)?;
+
+        // Reload and return the updated entity
+        TEnt::load(ctx, primary_key)
+            .await
+            .map_err(EntMutationError::EntLoadError)
+    }
+}
+
+impl<TEnt: Ent> Into<sea_query::UpdateStatement> for EntMutator<'_, TEnt> {
+    fn into(self) -> sea_query::UpdateStatement {
+        Query::update()
+            .table(TEnt::TABLE_NAME)
+            .and_where(TEnt::PrimaryKey::as_expr(TEnt::PrimaryKey::get_value(
+                self.ent,
+            )))
+            .values(
+                self.field_mutations
+                    .into_iter()
+                    .map(|(field_name, (_, expr))| (field_name, expr))
+                    .collect::<Vec<_>>(),
+            )
+            .to_owned()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{self as resent, mutator};
+    use crate::{self as resent};
 
     use super::*;
 
     #[derive(resent::EntSchema)]
     #[entschema(table = "test_ent")]
     pub struct TestEnt {
-        #[field(readonly)]
+        #[field(readonly, primary_key)]
         id: i32,
         value: String,
     }
 
     #[test]
-    fn test_ent_mutator() {
+    fn test_ent_mutation_field_state() {
         let ent = TestEnt {
             id: 1,
             value: "hello".to_string(),
@@ -110,5 +165,32 @@ mod tests {
             EntMutationFieldState::Unset => (),
             _ => panic!("Expected ValueField to be unset"),
         }
+    }
+
+    #[test]
+    fn test_ent_mutator_into_update_statement() {
+        let ent = TestEnt {
+            id: 1,
+            value: "hello".to_string(),
+        };
+
+        let mut mutator = ent.mutate();
+        mutator.set::<test_ent::Value>("world".to_string());
+
+        let update_stmt: sea_query::UpdateStatement = mutator.into();
+        let (sql, args) = update_stmt.build_sqlx(sea_query::PostgresQueryBuilder);
+
+        assert_eq!(
+            sql,
+            r#"UPDATE "test_ent" SET "value" = $1 WHERE "test_ent"."id" = $2"#
+        );
+        let args = args.0.0;
+        assert_eq!(
+            args,
+            vec![
+                sea_query::Value::String(Some("world".to_string())),
+                sea_query::Value::Int(Some(1))
+            ],
+        );
     }
 }

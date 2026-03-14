@@ -1,5 +1,6 @@
 pub mod field;
 pub mod mutator;
+pub mod primary_key;
 pub mod privacy;
 pub mod query;
 
@@ -10,12 +11,30 @@ use mutator::EntMutator;
 use privacy::EntPrivacyPolicy;
 use query::{EntLoadOnlyError, EntQuery, QueryContext, predicate::QueryPredicate as P};
 
+use crate::primary_key::EntPrimaryKey;
+
 pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     const TABLE_NAME: &'static str;
+    type PrimaryKey: EntPrimaryKey<Self>;
 
     /// Start an EntQuery for this entity type.
     fn query() -> EntQuery<Self> {
         EntQuery::new()
+    }
+
+    fn load<'ctx, Ctx: 'ctx + Sync>(
+        context: &'ctx QueryContext<Ctx>,
+        primary_key: <Self::PrimaryKey as EntPrimaryKey<Self>>::Value,
+    ) -> impl std::future::Future<Output = Result<Self, EntLoadOnlyError>> + Send
+    where
+        Self: EntPrivacyPolicy<'ctx, Ctx>,
+    {
+        async {
+            Self::query()
+                .where_expr(Self::PrimaryKey::as_expr(primary_key))
+                .only(context)
+                .await
+        }
     }
 
     /// Load an entity by its primary key.
@@ -40,8 +59,9 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     where
         Self: EntEdge<TOtherEnt>,
     {
-        EntQuery::<TOtherEnt>::new()
-            .where_field::<Self::TargetField>(P::equals(Self::SourceField::get_value(self).clone()))
+        EntQuery::<TOtherEnt>::new().where_field::<Self::TargetField>(P::equals(
+            <Self::SourceField as EntField>::get_value(self).clone(),
+        ))
     }
 
     /// Create an EntQuery for an inbound edge (edge reference)
@@ -50,7 +70,7 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
         TOtherEnt: EntEdge<Self>,
     {
         EntQuery::<TOtherEnt>::new().where_field::<TOtherEnt::SourceField>(P::equals(
-            TOtherEnt::TargetField::get_value(self).clone(),
+            <TOtherEnt::TargetField as EntField>::get_value(self).clone(),
         ))
     }
 }

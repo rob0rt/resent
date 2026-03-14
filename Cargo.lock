@@ -1189,6 +1189,7 @@ dependencies = [
  "chrono",
  "resent-macros",
  "sea-query",
+ "sea-query-sqlx",
  "sqlx",
  "tokio",
  "uuid",
@@ -1290,6 +1291,16 @@ dependencies = [
  "quote",
  "syn",
  "thiserror",
+]
+
+[[package]]
+name = "sea-query-sqlx"
+version = "0.8.0-rc.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4377164b09a11bb692dec6966eb0e6908d63d768defef0be689b39e02cf8544"
+dependencies = [
+ "sea-query",
+ "sqlx",
 ]
 
 [[package]]

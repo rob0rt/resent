@@ -23,6 +23,9 @@ struct EntStructField {
 
     #[darling(default)]
     readonly: bool,
+
+    #[darling(default)]
+    primary_key: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +66,16 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
         Err(e) => return e.write_errors().into(),
     };
 
+    let primary_keys: Vec<&EntStructField> = fields.iter().filter(|f| f.primary_key).collect();
+    if primary_keys.is_empty() {
+        return syn::Error::new_spanned(
+            &input.ident,
+            "At least one field must be marked as primary_key",
+        )
+        .to_compile_error()
+        .into();
+    }
+
     // --- Code generation ---
     let name = &input.ident;
     let mod_name = format_ident!("{}", name.to_string().to_case(Case::Snake));
@@ -77,6 +90,16 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
         }
     });
 
+    let primary_key = if primary_keys.len() == 1 {
+        let primary_key_name = primary_keys[0].struct_name();
+        quote! { #mod_name::#primary_key_name }
+    } else {
+        let names = primary_keys.iter().map(|f| f.struct_name());
+        quote! {
+            (#( #mod_name::#names ),*)
+        }
+    };
+
     quote! {
         pub mod #mod_name {
             use super::*;
@@ -86,6 +109,7 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
 
         impl resent::Ent for #name {
             const TABLE_NAME: &'static str = #table_str;
+            type PrimaryKey = #primary_key;
         }
 
         impl From<sqlx::postgres::PgRow> for #name {

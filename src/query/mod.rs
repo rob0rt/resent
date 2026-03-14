@@ -32,7 +32,7 @@ impl From<EntLoadError> for EntLoadOnlyError {
 
 #[derive(Clone)]
 pub struct QueryContext<T> {
-    conn: sqlx::PgPool,
+    pub(crate) conn: sqlx::PgPool,
     pub data: T,
 }
 
@@ -68,6 +68,15 @@ pub struct EntQuery<TOut> {
 impl<TOut> EntQuery<TOut> {
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
+        self
+    }
+
+    /// Add a raw filter expression to the query - this is used internally for
+    /// things like filtering by primary key, but can also be used for more
+    /// complex queries that aren't directly supported by the other query
+    /// methods.
+    pub(crate) fn where_expr(mut self, expr: Expr) -> Self {
+        self.filters.push(expr);
         self
     }
 }
