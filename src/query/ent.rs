@@ -12,7 +12,7 @@ use crate::{
 use sea_query::Order;
 
 impl<TEnt: Ent> EntQuery<TEnt> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             filters: Vec::new(),
             joins: Vec::new(),
