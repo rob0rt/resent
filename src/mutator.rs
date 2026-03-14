@@ -15,8 +15,8 @@ pub enum EntMutationFieldState<'a, TField: EntField> {
 
 /// Represents a reference to a field mutation, allowing us to track the old and new values of the field.
 pub struct EntMutationField<'a, TField: EntField> {
-    old: &'a TField::Value,
-    new: EntMutationFieldState<'a, TField>,
+    pub old: &'a TField::Value,
+    pub new: EntMutationFieldState<'a, TField>,
 }
 
 pub struct EntMutator<'a, TEnt: Ent> {

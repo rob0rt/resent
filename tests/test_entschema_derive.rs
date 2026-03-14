@@ -1,7 +1,7 @@
 use resent::{
     Ent, EntEdge, EntSchema,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
-    query::{QueryContext, predicate::QueryPredicate as P},
+    query::{Order, predicate::QueryPredicate as P},
 };
 use uuid::Uuid;
 
@@ -153,7 +153,7 @@ async fn test_ent_schema_derive() {
         .join::<EntBar>()
         .where_field::<ent_bar::Value, _>(P::equals("hello".to_string()))
         .where_field::<ent_baz::Id, _>(P::equals(uuid))
-        .order_by::<ent_baz::Id, _>(sea_query::Order::Asc)
+        .order_by::<ent_baz::Id, _>(Order::Asc)
         .into();
     assert_eq!(
         select.to_string(sea_query::PostgresQueryBuilder),

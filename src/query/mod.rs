@@ -3,13 +3,13 @@ mod ent;
 pub mod predicate;
 mod projection;
 
-use sea_query::{Expr, ExprTrait, Order};
-
 use crate::{
     Ent,
     field::EntField,
     query::{edges::EntWithEdges, projection::EntFieldProjection},
 };
+pub use sea_query::Order;
+use sea_query::{Expr, ExprTrait};
 
 #[derive(Debug)]
 pub enum EntLoadError {
