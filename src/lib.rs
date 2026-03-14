@@ -6,6 +6,7 @@ pub mod query;
 pub use resent_macros::EntSchema;
 
 use field::EntField;
+use mutator::EntMutator;
 use privacy::EntPrivacyPolicy;
 use query::{EntLoadOnlyError, EntQuery, QueryContext, predicate::QueryPredicate as P};
 
@@ -15,6 +16,11 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     /// Start an EntQuery for this entity type.
     fn query() -> EntQuery<Self> {
         EntQuery::new()
+    }
+
+    /// Load an entity by its primary key.
+    fn mutate<'a>(&'a self) -> EntMutator<'a, Self> {
+        EntMutator::new(self)
     }
 
     /// Load a related entity via an edge.
