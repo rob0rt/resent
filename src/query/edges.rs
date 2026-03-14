@@ -67,6 +67,20 @@ impl<TEnt: Ent, TEdges> EntQuery<EntWithEdges<TEnt, TEdges>> {
             _marker: std::marker::PhantomData,
         }
     }
+
+    /// Downcast the query to a specific entity type, as long as the new entity is contained in the edges.
+    pub fn downcast<TTarget: Ent>(self) -> EntQuery<TTarget>
+    where
+        (TEnt, TEdges): ContainsEnt<TTarget, Here>,
+    {
+        EntQuery {
+            filters: self.filters,
+            joins: self.joins,
+            limit: self.limit,
+            order: self.order,
+            _marker: std::marker::PhantomData,
+        }
+    }
 }
 
 pub struct Here;
