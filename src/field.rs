@@ -1,10 +1,17 @@
 use crate::Ent;
 use sea_query::Expr;
 
+pub trait FieldVisibility {}
+pub struct ReadOnly;
+impl FieldVisibility for ReadOnly {}
+pub struct ReadWrite;
+impl FieldVisibility for ReadWrite {}
+
 pub trait EntField: Sized {
     const NAME: &'static str;
     type Value: Into<Expr> + Clone + 'static;
     type Ent: Ent;
+    type Visibility: FieldVisibility;
 
     fn get_value(ent: &Self::Ent) -> &Self::Value;
 }

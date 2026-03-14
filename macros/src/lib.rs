@@ -124,6 +124,7 @@ impl EntStructField {
                 const NAME: &'static str = #field_name;
                 type Value = #field_type;
                 type Ent = #ent_name;
+                type Visibility = resent::field::ReadWrite;
 
                 fn get_value(ent: &Self::Ent) -> &Self::Value {
                     &ent.#ident

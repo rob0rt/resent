@@ -1,4 +1,9 @@
-use crate::{Ent, field::EntField, privacy::EntPrivacyPolicy, query::QueryContext};
+use std::collections::HashMap;
+
+use crate::{
+    Ent,
+    field::{EntField, ReadWrite},
+};
 
 pub enum EntMutationError {
     DatabaseError(sqlx::Error),
@@ -21,23 +26,26 @@ pub struct EntMutationField<'a, TField: EntField> {
 
 pub struct EntMutator<'a, TEnt: Ent> {
     ent: &'a TEnt,
-    field_mutations: std::collections::HashMap<String, Box<dyn std::any::Any>>,
+    field_mutations: HashMap<String, Box<dyn std::any::Any>>,
 }
 
 impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
     pub(crate) fn new(ent: &'a TEnt) -> Self {
         Self {
             ent,
-            field_mutations: std::collections::HashMap::new(),
+            field_mutations: HashMap::new(),
         }
     }
 
-    pub fn set<TField: EntField<Ent = TEnt>>(&mut self, new_value: TField::Value) {
+    pub fn set<TField: EntField<Ent = TEnt, Visibility = ReadWrite>>(
+        &mut self,
+        new_value: TField::Value,
+    ) {
         self.field_mutations
             .insert(TField::NAME.to_string(), Box::new(new_value));
     }
 
-    pub fn unset<TField: EntField<Ent = TEnt>>(&mut self) {
+    pub fn unset<TField: EntField<Ent = TEnt, Visibility = ReadWrite>>(&mut self) {
         self.field_mutations.remove(TField::NAME);
     }
 
@@ -63,4 +71,42 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
     // {
     //     // for (field_name, boxed_value) in self.field_mutations {}
     // }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate as resent;
+
+    use super::*;
+
+    #[derive(resent::EntSchema)]
+    #[entschema(table = "test_ent")]
+    pub struct TestEnt {
+        id: i32,
+        value: String,
+    }
+
+    #[test]
+    fn test_ent_mutator() {
+        let ent = TestEnt {
+            id: 1,
+            value: "hello".to_string(),
+        };
+
+        let mut mutator = ent.mutate();
+        assert_eq!(mutator.get::<test_ent::Id>().old, &1);
+        assert_eq!(mutator.get::<test_ent::Value>().old, &"hello".to_string());
+
+        mutator.set::<test_ent::Value>("world".to_string());
+        match mutator.get::<test_ent::Value>().new {
+            EntMutationFieldState::Set(new_value) => assert_eq!(new_value, "world"),
+            _ => panic!("Expected ValueField to be set"),
+        }
+
+        mutator.unset::<test_ent::Value>();
+        match mutator.get::<test_ent::Value>().new {
+            EntMutationFieldState::Unset => (),
+            _ => panic!("Expected ValueField to be unset"),
+        }
+    }
 }
