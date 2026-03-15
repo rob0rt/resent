@@ -85,7 +85,7 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
 
     /// Applies the mutation by checking privacy policies, generating and
     /// executing the update statement, and reloading the updated entity.
-    async fn apply<'ctx, Ctx: 'ctx + Sync>(
+    pub async fn apply<'ctx, Ctx: 'ctx + Sync>(
         self,
         ctx: &'ctx QueryContext<Ctx>,
     ) -> Result<TEnt, EntMutationError>
