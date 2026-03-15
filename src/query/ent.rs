@@ -9,7 +9,7 @@ use crate::{
         projection::EntFieldProjection,
     },
 };
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use sea_query::Order;
 use sea_query_sqlx::SqlxBinder;
 
@@ -94,6 +94,8 @@ impl<TEnt: Ent> EntQuery<TEnt> {
         }
     }
 
+    /// Loads entities matching the query, applying privacy policies to filter
+    /// results as needed.
     pub async fn load<'ctx, Ctx: 'ctx + Sync>(
         self,
         ctx: &'ctx QueryContext<Ctx>,
@@ -132,15 +134,24 @@ impl<TEnt: Ent> EntQuery<TEnt> {
                             if let Some(limit) = limit
                                 && results.len() >= limit
                             {
+                                // We've loaded the desired number of results,
+                                // so we can stop
                                 break 'query;
                             }
 
                             continue 'rows;
                         }
                         PrivacyRuleOutcome::Deny => {
+                            // This result did not pass the privacy policy, so
+                            // don't include it in the results and move on to
+                            // the next row
                             continue 'rows;
                         }
-                        PrivacyRuleOutcome::Skip => continue 'rules,
+                        PrivacyRuleOutcome::Skip => {
+                            // No determination for this rule, so process the
+                            // next one.
+                            continue 'rules;
+                        }
                     }
                 }
             }
