@@ -112,8 +112,8 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
             type PrimaryKey = #primary_key;
         }
 
-        impl From<sqlx::postgres::PgRow> for #name {
-            fn from(row: sqlx::postgres::PgRow) -> Self {
+        impl<'a> From<&'a sqlx::postgres::PgRow> for #name {
+            fn from(row: &'a sqlx::postgres::PgRow) -> Self {
                 use sqlx::Row;
                 Self {
                     #(#field_assignments),*

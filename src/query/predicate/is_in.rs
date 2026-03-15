@@ -11,6 +11,7 @@ use crate::{
 };
 
 pub trait InFieldExpression<TField: EntField> {
+    #[allow(clippy::wrong_self_convention)]
     fn is_in(self) -> Expr;
 }
 

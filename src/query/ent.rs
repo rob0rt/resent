@@ -30,9 +30,9 @@ impl<TEnt: Ent> EntQuery<TEnt> {
         self
     }
 
-    pub fn query_edge<TOtherEnt: Ent>(self) -> EntQuery<TOtherEnt>
+    pub fn query_edge<TOtherEnt>(self) -> EntQuery<TOtherEnt>
     where
-        TOtherEnt: EntEdge<TEnt>,
+        TOtherEnt: Ent + EntEdge<TEnt>,
     {
         let filters = if !self.filters.is_empty() || self.limit.is_some() || !self.joins.is_empty()
         {
@@ -110,7 +110,7 @@ impl<TEnt: Ent> EntQuery<TEnt> {
             .await
             .map_err(EntLoadError::DatabaseError)?
             .into_iter()
-            .map(|row| TEnt::from(row));
+            .map(|row| TEnt::from(&row));
 
         let mut results = Vec::new();
         'ents: for ent in ents {

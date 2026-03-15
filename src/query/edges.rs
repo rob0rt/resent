@@ -1,17 +1,22 @@
 use sea_query::Order;
+use sea_query_sqlx::SqlxBinder;
+use sqlx::postgres::PgRow;
 
 use crate::{
     Ent, EntEdge,
     field::EntField,
-    query::{EntQuery, JoinDef, predicate::FieldPredicate},
+    privacy::EntPrivacyPolicy,
+    query::{
+        EntLoadError, EntLoadOnlyError, EntQuery, JoinDef, QueryContext, predicate::FieldPredicate,
+    },
 };
 
-pub struct EntWithEdges<E, Edges> {
+pub struct EntWithEdges<E: Ent, Edges> {
     ent: E,
     edges: Edges,
 }
 
-impl<E, Edges> EntWithEdges<E, Edges> {
+impl<E: Ent, Edges> EntWithEdges<E, Edges> {
     pub fn edge<Edge, Index>(&self) -> &Edge
     where
         Edges: GetEdge<Edge, Index>,
@@ -20,14 +25,14 @@ impl<E, Edges> EntWithEdges<E, Edges> {
     }
 }
 
-impl<E, Edges> std::ops::Deref for EntWithEdges<E, Edges> {
+impl<E: Ent, Edges> std::ops::Deref for EntWithEdges<E, Edges> {
     type Target = E;
     fn deref(&self) -> &Self::Target {
         &self.ent
     }
 }
 
-impl<TEnt: Ent, TEdges> EntQuery<EntWithEdges<TEnt, TEdges>> {
+impl<TEnt: Ent, TEdges: EdgeList> EntQuery<EntWithEdges<TEnt, TEdges>> {
     pub fn where_field<TField: EntField, Index>(
         mut self,
         field_query: impl FieldPredicate<TField>,
@@ -68,7 +73,9 @@ impl<TEnt: Ent, TEdges> EntQuery<EntWithEdges<TEnt, TEdges>> {
         }
     }
 
-    /// Downcast the query to a specific entity type, as long as the new entity is contained in the edges.
+    /// Downcast the query to a specific entity type, as long as the new entity
+    /// is contained in the edges. Note that this means only the privacy policy
+    /// of the downcast-to entity will be applied.
     pub fn downcast<TTarget: Ent, Index>(self) -> EntQuery<TTarget>
     where
         (TEnt, TEdges): ContainsEnt<TTarget, Index>,
@@ -80,6 +87,65 @@ impl<TEnt: Ent, TEdges> EntQuery<EntWithEdges<TEnt, TEdges>> {
             order: self.order,
             _marker: std::marker::PhantomData,
         }
+    }
+
+    pub async fn load<'ctx, Ctx: 'ctx + Sync>(
+        self,
+        ctx: &'ctx QueryContext<Ctx>,
+    ) -> Result<Vec<EntWithEdges<TEnt, TEdges>>, EntLoadError>
+    where
+        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEdges: EdgeList,
+    {
+        let select: sea_query::SelectStatement = self.into();
+        let (sql, values) = select.build_sqlx(sea_query::PostgresQueryBuilder);
+        let rows = sqlx::query_with(&sql, values)
+            .fetch_all(&ctx.conn)
+            .await
+            .map_err(EntLoadError::DatabaseError)?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let ent = TEnt::from(&row);
+            let edges = TEdges::from_pg_row(&row);
+            results.push(EntWithEdges { ent, edges });
+        }
+        Ok(results)
+    }
+
+    pub async fn only<'ctx, Ctx: 'ctx + Sync>(
+        self,
+        ctx: &'ctx QueryContext<Ctx>,
+    ) -> Result<EntWithEdges<TEnt, TEdges>, EntLoadOnlyError>
+    where
+        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEdges: EdgeList,
+    {
+        let mut results = self.limit(2).load(ctx).await?;
+        match results.len() {
+            0 => Err(EntLoadOnlyError::NoResults),
+            1 => Ok(results.remove(0)),
+            _ => Err(EntLoadOnlyError::TooManyResults),
+        }
+    }
+}
+
+pub trait EdgeList {
+    fn from_pg_row(row: &PgRow) -> Self;
+}
+
+impl<Edge: Ent> EdgeList for (Edge, ()) {
+    fn from_pg_row(row: &PgRow) -> Self {
+        (Edge::from(row), ())
+    }
+}
+
+impl<Edge: Ent, T> EdgeList for (Edge, T)
+where
+    T: EdgeList,
+{
+    fn from_pg_row(row: &PgRow) -> (Edge, T) {
+        (Edge::from(row), T::from_pg_row(row))
     }
 }
 

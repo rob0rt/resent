@@ -13,7 +13,7 @@ use query::{EntLoadOnlyError, EntQuery, QueryContext, predicate::QueryPredicate 
 
 use crate::primary_key::EntPrimaryKey;
 
-pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
+pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
     const TABLE_NAME: &'static str;
     type PrimaryKey: EntPrimaryKey<Self>;
 
@@ -43,13 +43,13 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     }
 
     /// Load a related entity via an edge.
-    fn load_edge<'ctx, TOtherEnt: Ent, Ctx: 'ctx + Sync>(
+    fn load_edge<'ctx, TOtherEnt, Ctx: 'ctx + Sync>(
         &self,
         context: &'ctx QueryContext<Ctx>,
     ) -> impl std::future::Future<Output = Result<TOtherEnt, EntLoadOnlyError>> + Send
     where
         Self: EntEdge<TOtherEnt>,
-        TOtherEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TOtherEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>,
     {
         self.query_edge().only(context)
     }
@@ -65,9 +65,9 @@ pub trait Ent: Send + Sized + From<sqlx::postgres::PgRow> {
     }
 
     /// Create an EntQuery for an inbound edge (edge reference)
-    fn query_edge_ref<TOtherEnt: Ent>(&self) -> EntQuery<TOtherEnt>
+    fn query_edge_ref<TOtherEnt>(&self) -> EntQuery<TOtherEnt>
     where
-        TOtherEnt: EntEdge<Self>,
+        TOtherEnt: Ent + EntEdge<Self>,
     {
         EntQuery::<TOtherEnt>::new().where_field::<TOtherEnt::SourceField>(P::equals(
             <TOtherEnt::TargetField as EntField>::get_value(self).clone(),
