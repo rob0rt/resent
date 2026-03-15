@@ -51,6 +51,8 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
         }
     }
 
+    /// Sets the new value for a field in the mutation. This will overwrite any
+    /// previous mutation for the same field.
     pub fn set<TField: EntField<Ent = TEnt, Visibility = ReadWrite>>(
         &mut self,
         new_value: TField::Value,
@@ -60,10 +62,14 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
             .insert(TField::NAME.to_string(), (Box::new(new_value), expr));
     }
 
+    /// Unsets the value for a field in the mutation, effectively removing any
+    /// previous mutation for that field.
     pub fn unset<TField: EntField<Ent = TEnt, Visibility = ReadWrite>>(&mut self) {
         self.field_mutations.remove(TField::NAME);
     }
 
+    /// Gets the current state of a field in the mutation, including the old
+    /// value and the new value if it has been set.
     pub fn get<'b, TField: EntField<Ent = TEnt>>(&'b self) -> EntMutationField<'b, TField> {
         EntMutationField {
             old: TField::get_value(self.ent),
@@ -77,6 +83,8 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
         }
     }
 
+    /// Applies the mutation by checking privacy policies, generating and
+    /// executing the update statement, and reloading the updated entity.
     async fn apply<'ctx, Ctx: 'ctx + Sync>(
         self,
         ctx: &'ctx QueryContext<Ctx>,
