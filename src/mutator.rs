@@ -87,7 +87,7 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
         // Check privacy policy
         let policies = TEnt::mutation_policy();
         for policy in policies {
-            match policy.evaluation(ctx, &self.ent).await {
+            match policy.evaluation(ctx, self.ent).await {
                 PrivacyRuleOutcome::Allow => (),
                 PrivacyRuleOutcome::Deny => return Err(EntMutationError::PrivacyPolicyDenied),
                 PrivacyRuleOutcome::Skip => continue,
@@ -111,15 +111,15 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
     }
 }
 
-impl<TEnt: Ent> Into<sea_query::UpdateStatement> for EntMutator<'_, TEnt> {
-    fn into(self) -> sea_query::UpdateStatement {
+impl<TEnt: Ent> From<EntMutator<'_, TEnt>> for sea_query::UpdateStatement {
+    fn from(val: EntMutator<'_, TEnt>) -> Self {
         Query::update()
             .table(TEnt::TABLE_NAME)
             .and_where(TEnt::PrimaryKey::as_expr(TEnt::PrimaryKey::get_value(
-                self.ent,
+                val.ent,
             )))
             .values(
-                self.field_mutations
+                val.field_mutations
                     .into_iter()
                     .map(|(field_name, (_, expr))| (field_name, expr))
                     .collect::<Vec<_>>(),

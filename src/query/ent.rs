@@ -47,7 +47,7 @@ impl<TEnt: Ent> EntQuery<TEnt> {
             vec![]
         };
         EntQuery {
-            filters: filters,
+            filters,
             joins: Vec::new(),
             limit: None,
             order: None,
@@ -101,7 +101,6 @@ impl<TEnt: Ent> EntQuery<TEnt> {
     {
         let query_policy = TEnt::query_policy();
 
-        let ctx = ctx;
         let select: sea_query::SelectStatement = self.into();
         let select_statement = select.to_string(sea_query::PostgresQueryBuilder);
 

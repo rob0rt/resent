@@ -97,15 +97,15 @@ impl<TEnt: Ent, TField: EntField<Ent = TEnt>> EntTarget for EntFieldProjection<T
     type Target = TEnt;
 }
 
-impl<TEnt: Ent, Target: EntTarget<Target = TEnt>> Into<sea_query::SelectStatement>
-    for EntQuery<Target>
+impl<TEnt: Ent, Target: EntTarget<Target = TEnt>> From<EntQuery<Target>>
+    for sea_query::SelectStatement
 {
-    fn into(self) -> sea_query::SelectStatement {
+    fn from(val: EntQuery<Target>) -> Self {
         let mut query = sea_query::Query::select();
         query
             .column(sea_query::Asterisk)
             .from(sea_query::Alias::new(TEnt::TABLE_NAME));
-        for join in self.joins {
+        for join in val.joins {
             query.join(
                 sea_query::JoinType::InnerJoin,
                 sea_query::Alias::new(join.table),
@@ -113,14 +113,14 @@ impl<TEnt: Ent, Target: EntTarget<Target = TEnt>> Into<sea_query::SelectStatemen
                     .equals((join.right_table, join.right_col)),
             );
         }
-        for expr in self.filters {
+        for expr in val.filters {
             query.and_where(expr);
         }
-        if let Some(limit) = self.limit {
+        if let Some(limit) = val.limit {
             query.limit(limit as u64);
         }
-        if let Some(order) = self.order {
-            query.order_by((TEnt::TABLE_NAME, order.0), order.1.into());
+        if let Some(order) = val.order {
+            query.order_by((TEnt::TABLE_NAME, order.0), order.1);
         }
         query
     }
