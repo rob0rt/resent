@@ -5,19 +5,19 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1.64"
-chrono = "0.4.44"
+time = "0.3.47"
 futures-util = "0.3.32"
 resent-macros = { path = "./macros" }
 sea-query = { version = "1.0.0-rc.31", features = [
     "with-uuid",
-    "with-chrono",
+    "with-time",
     "with-json",
 ] }
-sqlx = { version = "0.8.6", features = ["postgres", "uuid", "chrono", "json"] }
+sqlx = { version = "0.8.6", features = ["postgres", "uuid", "time", "json"] }
 sea-query-sqlx = { version = "0.8.0-rc.14", features = [
     "sqlx-postgres",
     "with-uuid",
-    "with-chrono",
+    "with-time",
     "with-json",
 ] }
 thiserror = "2.0.18"
@@ -28,7 +28,7 @@ uuid = { version = "1.3.0", features = ["v4"] }
 sqlx = { version = "0.8.6", features = [
     "postgres",
     "uuid",
-    "chrono",
+    "time",
     "runtime-tokio-native-tls",
 ] }
 tokio = { version = "1.28.2", features = ["full"] }

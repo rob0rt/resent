@@ -7,8 +7,7 @@ use crate::{
 };
 
 pub trait AfterFieldValue: Into<Value> {}
-impl AfterFieldValue for chrono::NaiveDateTime {}
-impl AfterFieldValue for chrono::DateTime<chrono::Utc> {}
+impl AfterFieldValue for time::OffsetDateTime {}
 
 impl QueryPredicate {
     /// Creates a predicate that checks if a field's value is after the given value.
