@@ -8,14 +8,20 @@ async-trait = "0.1.64"
 chrono = "0.4.44"
 futures-util = "0.3.32"
 resent-macros = { path = "./macros" }
-sea-query = { version = "1.0.0-rc.31", features = ["with-uuid", "with-chrono"] }
-sqlx = { version = "0.8.6", features = ["postgres", "uuid", "chrono"] }
+sea-query = { version = "1.0.0-rc.31", features = [
+    "with-uuid",
+    "with-chrono",
+    "with-json",
+] }
+sqlx = { version = "0.8.6", features = ["postgres", "uuid", "chrono", "json"] }
 sea-query-sqlx = { version = "0.8.0-rc.14", features = [
     "sqlx-postgres",
     "with-uuid",
     "with-chrono",
+    "with-json",
 ] }
 thiserror = "2.0.18"
+
 
 [dev-dependencies]
 uuid = { version = "1.3.0", features = ["v4"] }
