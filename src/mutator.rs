@@ -37,9 +37,10 @@ pub struct EntMutationField<'a, TField: EntField> {
 pub struct EntMutator<'a, TEnt: Ent> {
     ent: &'a TEnt,
 
-    /// Maps field (column) names to the new value and the corresponding sea-query expression for that value.
-    /// We store the new value as a boxed `Any` so that we can downcast it back to the correct type when inspecting the mutation.
-    /// The sea-query expression is stored separately so that we can generate the SQL update statement without needing to know the concrete type of the value at that point.
+    /// Maps field (column) names to the new value and the corresponding sea-query expression for that value. We store
+    /// the new value as a boxed `Any` so that we can downcast it back to the correct type when inspecting the mutation.
+    /// The sea-query expression is stored separately so that we can generate the SQL update statement without needing
+    /// to know the concrete type of the value at that point.
     field_mutations: HashMap<String, (Box<dyn std::any::Any>, Expr)>,
 }
 
@@ -83,8 +84,8 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
         }
     }
 
-    /// Applies the mutation by checking privacy policies, generating and
-    /// executing the update statement, and reloading the updated entity.
+    /// Applies the mutation by checking privacy policies, generating and executing the update statement, and reloading
+    /// the updated entity.
     pub async fn apply<'ctx, Ctx: 'ctx + Sync>(
         self,
         ctx: &'ctx QueryContext<Ctx>,
@@ -92,7 +93,8 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
     where
         TEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        // Get the primary key value of the entity being mutated - we'll need this to reload the entity after the mutation is applied.
+        // Get the primary key value of the entity being mutated - we'll need this to reload the entity after the
+        // mutation is applied.
         let primary_key = TEnt::PrimaryKey::get_value(self.ent);
 
         // Check privacy policy

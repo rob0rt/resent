@@ -45,7 +45,8 @@ impl<TEnt: Ent> EntQuery<TEnt> {
                 .to_expr(),
             ]
         } else {
-            // Optimization: if the current query has no filters, joins, or limits, we can skip the subquery and just query directly on the edge table
+            // Optimization: if the current query has no filters, joins, or limits, we can skip the subquery and just
+            // query directly on the edge table
             vec![]
         };
         EntQuery {
@@ -94,8 +95,7 @@ impl<TEnt: Ent> EntQuery<TEnt> {
         }
     }
 
-    /// Loads entities matching the query, applying privacy policies to filter
-    /// results as needed.
+    /// Loads entities matching the query, applying privacy policies to filter results as needed.
     pub async fn load<'ctx, Ctx: 'ctx + Sync>(
         self,
         ctx: &'ctx QueryContext<Ctx>,
@@ -116,8 +116,7 @@ impl<TEnt: Ent> EntQuery<TEnt> {
             let (sql, values) = select.build_sqlx(sea_query::PostgresQueryBuilder);
             let mut rows = sqlx::query_with(&sql, values).fetch(conn);
 
-            // Evaluate privacy policies for each result, and only include
-            // results that pass.
+            // Evaluate privacy policies for each result, and only include results that pass.
             let mut result_count = 0;
             'rows: while let Some(row) = rows.next().await {
                 result_count += 1;
@@ -134,22 +133,19 @@ impl<TEnt: Ent> EntQuery<TEnt> {
                             if let Some(limit) = limit
                                 && results.len() >= limit
                             {
-                                // We've loaded the desired number of results,
-                                // so we can stop
+                                // We've loaded the desired number of results, so we can stop
                                 break 'query;
                             }
 
                             continue 'rows;
                         }
                         PrivacyRuleOutcome::Deny => {
-                            // This result did not pass the privacy policy, so
-                            // don't include it in the results and move on to
-                            // the next row
+                            // This result did not pass the privacy policy, so don't include it in the results and move
+                            // on to the next row
                             continue 'rows;
                         }
                         PrivacyRuleOutcome::Skip => {
-                            // No determination for this rule, so process the
-                            // next one.
+                            // No determination for this rule, so process the next one.
                             continue 'rules;
                         }
                     }
@@ -162,13 +158,11 @@ impl<TEnt: Ent> EntQuery<TEnt> {
                     break 'query;
                 }
 
-                // We have not loaded the desired number of results, so we'll
-                // need to load more - update the offset and run the query again
+                // We have not loaded the desired number of results, so we'll need to load more - update the offset and
+                // run the query again
                 //
-                // TODO: dynamically adjust the limit to try to minimize the
-                // number of queries we need to run, and consider putting an
-                // upper bound on the number of queries we will run to avoid
-                // full table scans.
+                // TODO: dynamically adjust the limit to try to minimize the number of queries we need to run, and
+                // consider putting an upper bound on the number of queries we will run to avoid full table scans.
                 offset += limit as u64;
                 select.offset(offset);
             } else {
@@ -196,7 +190,8 @@ impl<TEnt: Ent> EntQuery<TEnt> {
         }
     }
 
-    /// Loads the first result, returning None if there are no results. Will not return an error if there are multiple results.
+    /// Loads the first result, returning None if there are no results. Will not return an error if there are multiple
+    /// results.
     pub async fn first<'ctx, Ctx: 'ctx + Sync>(
         self,
         ctx: &'ctx QueryContext<Ctx>,

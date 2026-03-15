@@ -54,7 +54,8 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
         self.query_edge().only(context)
     }
 
-    /// Create an EntQuery for an edge, but don't execute it - this is useful for building up more complex queries that involve edges.
+    /// Create an EntQuery for an edge, but don't execute it - this is useful for building up more complex queries that
+    /// involve edges.
     fn query_edge<TOtherEnt: Ent>(&self) -> EntQuery<TOtherEnt>
     where
         Self: EntEdge<TOtherEnt>,
