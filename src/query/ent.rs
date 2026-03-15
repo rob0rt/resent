@@ -9,7 +9,9 @@ use crate::{
         projection::EntFieldProjection,
     },
 };
+use futures_util::{StreamExt, TryStreamExt};
 use sea_query::Order;
+use sea_query_sqlx::SqlxBinder;
 
 impl<TEnt: Ent> EntQuery<TEnt> {
     pub(crate) fn new() -> Self {
@@ -101,36 +103,67 @@ impl<TEnt: Ent> EntQuery<TEnt> {
     {
         let query_policy = TEnt::query_policy();
 
-        let select: sea_query::SelectStatement = self.into();
-        let select_statement = select.to_string(sea_query::PostgresQueryBuilder);
+        let limit = self.limit;
+        let mut select: sea_query::SelectStatement = self.into();
 
         let conn = &ctx.conn;
-        let ents = sqlx::query(&select_statement)
-            .fetch_all(conn)
-            .await
-            .map_err(EntLoadError::DatabaseError)?
-            .into_iter()
-            .map(|row| TEnt::from(&row));
 
         let mut results = Vec::new();
-        'ents: for ent in ents {
-            'rules: for rule in &query_policy {
-                match rule.evaluation(ctx, &ent).await {
-                    PrivacyRuleOutcome::Allow => {
-                        results.push(ent);
-                        continue 'ents;
+        let mut offset = 0;
+        'query: loop {
+            let (sql, values) = select.build_sqlx(sea_query::PostgresQueryBuilder);
+            let mut rows = sqlx::query_with(&sql, values).fetch(conn);
+
+            // Evaluate privacy policies for each result, and only include
+            // results that pass.
+            let mut result_count = 0;
+            'rows: while let Some(row) = rows.next().await {
+                result_count += 1;
+
+                let ent = row
+                    .map(|r| TEnt::from(&r))
+                    .map_err(EntLoadError::DatabaseError)?;
+
+                'rules: for rule in &query_policy {
+                    match rule.evaluation(ctx, &ent).await {
+                        PrivacyRuleOutcome::Allow => {
+                            results.push(ent);
+
+                            if let Some(limit) = limit
+                                && results.len() >= limit
+                            {
+                                break 'query;
+                            }
+
+                            continue 'rows;
+                        }
+                        PrivacyRuleOutcome::Deny => {
+                            continue 'rows;
+                        }
+                        PrivacyRuleOutcome::Skip => continue 'rules,
                     }
-                    PrivacyRuleOutcome::Deny => {
-                        continue 'ents;
-                    }
-                    PrivacyRuleOutcome::Skip => continue 'rules,
                 }
             }
 
-            println!(
-                "Warning: No privacy rules applied for query on {}",
-                std::any::type_name::<TEnt>()
-            );
+            if let Some(limit) = limit {
+                if result_count < limit {
+                    // We've loaded all results, so we can stop
+                    break 'query;
+                }
+
+                // We have not loaded the desired number of results, so we'll
+                // need to load more - update the offset and run the query again
+                //
+                // TODO: dynamically adjust the limit to try to minimize the
+                // number of queries we need to run, and consider putting an
+                // upper bound on the number of queries we will run to avoid
+                // full table scans.
+                offset += limit as u64;
+                select.offset(offset);
+            } else {
+                // We've already loaded all results, so we can stop
+                break 'query;
+            }
         }
 
         Ok(results)
