@@ -59,7 +59,7 @@ pub fn derive_ent_schema(item: TokenStream) -> TokenStream {
     };
     let fields: Vec<EntStructField> = match named_fields
         .iter()
-        .map(|f| EntStructField::from_field(f))
+        .map(EntStructField::from_field)
         .collect::<darling::Result<Vec<_>>>()
     {
         Ok(v) => v,
