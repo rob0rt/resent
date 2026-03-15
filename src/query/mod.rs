@@ -10,24 +10,24 @@ use crate::{
 };
 pub use sea_query::Order;
 use sea_query::{Expr, ExprTrait};
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum EntLoadError {
-    DatabaseError(sqlx::Error),
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+    #[error("Invalid privacy policy")]
     InvalidPrivacyPolicy,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum EntLoadOnlyError {
-    LoadError(EntLoadError),
+    #[error("Load error: {0}")]
+    LoadError(#[from] EntLoadError),
+    #[error("No results found")]
     NoResults,
+    #[error("Too many results found")]
     TooManyResults,
-}
-
-impl From<EntLoadError> for EntLoadOnlyError {
-    fn from(value: EntLoadError) -> Self {
-        EntLoadOnlyError::LoadError(value)
-    }
 }
 
 #[derive(Clone)]

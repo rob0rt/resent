@@ -1,8 +1,3 @@
-use std::collections::HashMap;
-
-use sea_query::{Expr, Query};
-use sea_query_sqlx::SqlxBinder;
-
 use crate::{
     Ent,
     field::{EntField, ReadWrite},
@@ -10,11 +5,19 @@ use crate::{
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
     query::{EntLoadOnlyError, QueryContext},
 };
+use sea_query::{Expr, Query};
+use sea_query_sqlx::SqlxBinder;
+use std::collections::HashMap;
+use thiserror::Error;
 
+#[derive(Debug, Error)]
 pub enum EntMutationError {
-    DatabaseError(sqlx::Error),
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+    #[error("Privacy policy denied")]
     PrivacyPolicyDenied,
-    EntLoadError(EntLoadOnlyError),
+    #[error("Load error: {0}")]
+    EntLoadError(#[from] EntLoadOnlyError),
 }
 
 pub enum EntMutationFieldState<'a, TField: EntField> {
@@ -102,12 +105,12 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
         sqlx::query_with(&sql, args)
             .execute(&ctx.conn)
             .await
-            .map_err(EntMutationError::DatabaseError)?;
+            .map_err(EntMutationError::from)?;
 
         // Reload and return the updated entity
         TEnt::load(ctx, primary_key)
             .await
-            .map_err(EntMutationError::EntLoadError)
+            .map_err(EntMutationError::from)
     }
 }
 
