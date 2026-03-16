@@ -1,3 +1,4 @@
+pub mod creator;
 pub mod field;
 pub mod mutator;
 pub mod primary_key;
@@ -8,10 +9,18 @@ pub use resent_macros::EntSchema;
 
 use field::EntField;
 use mutator::EntMutator;
+use primary_key::EntPrimaryKey;
 use privacy::EntPrivacyPolicy;
 use query::{EntLoadOnlyError, EntQuery, QueryContext, predicate::QueryPredicate as P};
+use sea_query::DeleteStatement;
+use sea_query_sqlx::SqlxBinder;
+use thiserror::Error;
 
-use crate::primary_key::EntPrimaryKey;
+#[derive(Debug, Error)]
+enum EntDeletionError {
+    #[error("Database error: {0}")]
+    QueryError(#[from] sqlx::Error),
+}
 
 pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
     const TABLE_NAME: &'static str;
@@ -34,6 +43,30 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
                 .where_expr(Self::PrimaryKey::as_expr(primary_key))
                 .only(context)
                 .await
+        }
+    }
+
+    /// Delete this entity from the database.
+    fn delete<'ctx, Ctx: 'ctx + Sync>(
+        self,
+        context: &'ctx QueryContext<Ctx>,
+    ) -> impl std::future::Future<Output = Result<(), EntDeletionError>> + Send
+    where
+        Self: EntPrivacyPolicy<'ctx, Ctx>,
+    {
+        async move {
+            let primary_key = Self::PrimaryKey::get_value(&self);
+
+            let (sql, values) = DeleteStatement::new()
+                .from_table(Self::TABLE_NAME)
+                .cond_where(Self::PrimaryKey::as_expr(primary_key))
+                .build_sqlx(sea_query::PostgresQueryBuilder);
+
+            sqlx::query_with(&sql, values)
+                .execute(&context.conn)
+                .await?;
+
+            Ok(())
         }
     }
 
