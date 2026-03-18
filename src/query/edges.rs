@@ -52,17 +52,19 @@ impl<TEnt: Ent, TEdges: EdgeList> EntQuery<EntWithEdges<TEnt, TEdges>> {
         self
     }
 
-    pub fn join<TOtherEnt: Ent>(self) -> EntQuery<EntWithEdges<TEnt, (TOtherEnt, TEdges)>>
+    pub fn join<TEdge: EntEdge, Index>(
+        self,
+    ) -> EntQuery<EntWithEdges<TEnt, (<TEdge::TargetField as EntField>::Ent, TEdges)>>
     where
-        TEnt: EntEdge<TOtherEnt>,
+        (TEnt, TEdges): ContainsEnt<TEdge::Ent, Index>,
     {
         let mut joins = self.joins;
         joins.push(JoinDef {
-            table: TOtherEnt::TABLE_NAME,
-            left_table: TEnt::TABLE_NAME,
-            left_col: <TEnt as EntEdge<TOtherEnt>>::SourceField::NAME,
-            right_table: TOtherEnt::TABLE_NAME,
-            right_col: <TEnt as EntEdge<TOtherEnt>>::TargetField::NAME,
+            table: <TEdge::TargetField as EntField>::Ent::TABLE_NAME,
+            left_table: TEdge::Ent::TABLE_NAME,
+            left_col: TEdge::NAME,
+            right_table: <TEdge::TargetField as EntField>::Ent::TABLE_NAME,
+            right_col: <TEdge::TargetField as EntField>::NAME,
         });
         EntQuery {
             filters: self.filters,

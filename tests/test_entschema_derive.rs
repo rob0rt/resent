@@ -64,8 +64,7 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBaz {
     }
 }
 
-impl EntEdge<EntBar> for EntBaz {
-    type SourceField = ent_baz::Id;
+impl EntEdge for ent_baz::Id {
     type TargetField = ent_bar::Id;
 }
 
@@ -103,7 +102,7 @@ async fn test_ent_schema_derive() {
     );
 
     let select: sea_query::SelectStatement = EntBar::query()
-        .query_edge::<EntBaz>()
+        .query_edge_ref::<ent_baz::Id>()
         .where_field::<ent_baz::Id>(P::equals(uuid))
         .into();
     assert_eq!(
@@ -113,7 +112,7 @@ async fn test_ent_schema_derive() {
 
     let select: sea_query::SelectStatement = EntBar::query()
         .where_field::<ent_bar::Value>(P::equals("hello".to_string()))
-        .query_edge::<EntBaz>()
+        .query_edge_ref::<ent_baz::Id>()
         .where_field::<ent_baz::Id>(P::equals(uuid))
         .into();
     assert_eq!(
@@ -124,14 +123,14 @@ async fn test_ent_schema_derive() {
         ),
     );
 
-    let select: sea_query::SelectStatement = EntBaz::query().join::<EntBar>().into();
+    let select: sea_query::SelectStatement = EntBaz::query().join::<ent_baz::Id>().into();
     assert_eq!(
         select.to_string(sea_query::PostgresQueryBuilder),
         r#"SELECT * FROM "baz" INNER JOIN "bar" ON "baz"."id" = "bar"."id""#
     );
 
     let select: sea_query::SelectStatement = EntBaz::query()
-        .join::<EntBar>()
+        .join::<ent_baz::Id>()
         .where_field::<ent_bar::Value, _>(P::equals("hello".to_string()))
         .into();
     assert_eq!(
@@ -140,7 +139,7 @@ async fn test_ent_schema_derive() {
     );
 
     let select: sea_query::SelectStatement = EntBaz::query()
-        .join::<EntBar>()
+        .join::<ent_baz::Id>()
         .where_field::<ent_bar::Value, _>(P::equals("hello".to_string()))
         .where_field::<ent_baz::Id, _>(P::equals(uuid))
         .into();
@@ -153,7 +152,7 @@ async fn test_ent_schema_derive() {
     );
 
     let select: sea_query::SelectStatement = EntBaz::query()
-        .join::<EntBar>()
+        .join::<ent_baz::Id>()
         .where_field::<ent_bar::Value, _>(P::equals("hello".to_string()))
         .where_field::<ent_baz::Id, _>(P::equals(uuid))
         .order_by::<ent_baz::Id, _>(Order::Asc)

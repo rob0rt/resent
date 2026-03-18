@@ -75,43 +75,41 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
     }
 
     /// Load a related entity via an edge.
-    fn load_edge<'ctx, TOtherEnt, Ctx: 'ctx + Sync>(
+    fn load_edge<'ctx, TEdge: EntEdge<Ent = Self>, Ctx: 'ctx + Sync>(
         &self,
         context: &'ctx QueryContext<Ctx>,
-    ) -> impl std::future::Future<Output = Result<TOtherEnt, EntLoadOnlyError>> + Send
+    ) -> impl std::future::Future<
+        Output = Result<<TEdge::TargetField as EntField>::Ent, EntLoadOnlyError>,
+    > + Send
     where
-        Self: EntEdge<TOtherEnt>,
-        TOtherEnt: Ent + EntPrivacyPolicy<'ctx, Ctx>,
+        <TEdge::TargetField as EntField>::Ent: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        self.query_edge().only(context)
+        self.query_edge::<TEdge>().only(context)
     }
 
     /// Create an EntQuery for an edge, but don't execute it - this is useful for building up more complex queries that
     /// involve edges.
-    fn query_edge<TOtherEnt: Ent>(&self) -> EntQuery<TOtherEnt>
-    where
-        Self: EntEdge<TOtherEnt>,
-    {
-        EntQuery::<TOtherEnt>::new().where_field::<Self::TargetField>(P::equals(
-            <Self::SourceField as EntField>::get_value(self).clone(),
-        ))
+    fn query_edge<TEdge: EntEdge<Ent = Self>>(
+        &self,
+    ) -> EntQuery<<TEdge::TargetField as EntField>::Ent> {
+        EntQuery::<<TEdge::TargetField as EntField>::Ent>::new()
+            .where_field::<TEdge::TargetField>(P::equals(TEdge::get_value(self).clone()))
     }
 
     /// Create an EntQuery for an inbound edge (edge reference)
-    fn query_edge_ref<TOtherEnt>(&self) -> EntQuery<TOtherEnt>
+    fn query_edge_ref<TEdge: EntEdge>(&self) -> EntQuery<TEdge::Ent>
     where
-        TOtherEnt: Ent + EntEdge<Self>,
+        TEdge::TargetField: EntField<Ent = Self>,
     {
-        EntQuery::<TOtherEnt>::new().where_field::<TOtherEnt::SourceField>(P::equals(
-            <TOtherEnt::TargetField as EntField>::get_value(self).clone(),
+        EntQuery::<TEdge::Ent>::new().where_field::<TEdge>(P::equals(
+            <TEdge::TargetField as EntField>::get_value(self).clone(),
         ))
     }
 }
 
-pub trait EntEdge<TTarget: Ent>
+pub trait EntEdge
 where
-    Self: Ent,
+    Self: EntField,
 {
-    type SourceField: EntField<Ent = Self>;
-    type TargetField: EntField<Ent = TTarget, Value = <Self::SourceField as EntField>::Value>;
+    type TargetField: EntField<Value = Self::Value>;
 }

@@ -32,18 +32,35 @@ impl<TEnt: Ent> EntQuery<TEnt> {
         self
     }
 
-    pub fn query_edge<TOtherEnt>(self) -> EntQuery<TOtherEnt>
+    /// Query an outbound edge (regular edge)
+    pub fn query_edge<TEdge: EntEdge<Ent = TEnt>>(
+        self,
+    ) -> EntQuery<<TEdge::TargetField as EntField>::Ent> {
+        let filters = if !self.filters.is_empty() || self.limit.is_some() || !self.joins.is_empty()
+        {
+            vec![QueryPredicate::is_in::<TEdge::TargetField, _>(self.select::<TEdge>()).to_expr()]
+        } else {
+            // Optimization: if the current query has no filters, joins, or limits, we can skip the subquery and just
+            // query directly on the edge table
+            vec![]
+        };
+        EntQuery {
+            filters,
+            joins: Vec::new(),
+            limit: None,
+            order: None,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Query an inbound edge (edge reference)
+    pub fn query_edge_ref<TEdge: EntEdge>(self) -> EntQuery<TEdge::Ent>
     where
-        TOtherEnt: Ent + EntEdge<TEnt>,
+        TEdge::TargetField: EntField<Ent = TEnt>,
     {
         let filters = if !self.filters.is_empty() || self.limit.is_some() || !self.joins.is_empty()
         {
-            vec![
-                QueryPredicate::is_in::<TOtherEnt::SourceField, _>(
-                    self.select::<TOtherEnt::TargetField>(),
-                )
-                .to_expr(),
-            ]
+            vec![QueryPredicate::is_in::<TEdge, _>(self.select::<TEdge::TargetField>()).to_expr()]
         } else {
             // Optimization: if the current query has no filters, joins, or limits, we can skip the subquery and just
             // query directly on the edge table
@@ -74,17 +91,16 @@ impl<TEnt: Ent> EntQuery<TEnt> {
     }
 
     /// A join will include a related entity in the query output
-    pub fn join<TOtherEnt: Ent>(self) -> EntQuery<EntWithEdges<TEnt, (TOtherEnt, ())>>
-    where
-        TEnt: EntEdge<TOtherEnt>,
-    {
+    pub fn join<TEdge: EntEdge<Ent = TEnt>>(
+        self,
+    ) -> EntQuery<EntWithEdges<TEnt, (<TEdge::TargetField as EntField>::Ent, ())>> {
         let mut joins = self.joins;
         joins.push(JoinDef {
-            table: TOtherEnt::TABLE_NAME,
+            table: <TEdge::TargetField as EntField>::Ent::TABLE_NAME,
             left_table: TEnt::TABLE_NAME,
-            left_col: <TEnt as EntEdge<TOtherEnt>>::SourceField::NAME,
-            right_table: TOtherEnt::TABLE_NAME,
-            right_col: <TEnt as EntEdge<TOtherEnt>>::TargetField::NAME,
+            left_col: TEdge::NAME,
+            right_table: <TEdge::TargetField as EntField>::Ent::TABLE_NAME,
+            right_col: <TEdge::TargetField as EntField>::NAME,
         });
         EntQuery {
             filters: self.filters,
