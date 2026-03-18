@@ -16,7 +16,7 @@ use sea_query_sqlx::SqlxBinder;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-enum EntDeletionError {
+pub enum EntDeletionError {
     #[error("Database error: {0}")]
     QueryError(#[from] sqlx::Error),
 }
