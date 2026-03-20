@@ -1,3 +1,4 @@
+pub mod creator;
 pub mod field;
 pub mod mutator;
 pub mod primary_key;
@@ -6,6 +7,7 @@ pub mod query;
 
 pub use resent_macros::EntSchema;
 
+use creator::EntCreator;
 use field::EntField;
 use mutator::EntMutator;
 use primary_key::EntPrimaryKey;
@@ -28,6 +30,10 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
     /// Start an EntQuery for this entity type.
     fn query() -> EntQuery<Self> {
         EntQuery::new()
+    }
+
+    fn create() -> EntCreator<Self> {
+        EntCreator::new()
     }
 
     fn load<'ctx, Ctx: 'ctx + Sync>(
