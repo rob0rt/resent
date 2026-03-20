@@ -28,16 +28,18 @@ impl<TEnt: Ent> EntCreator<TEnt> {
 
     /// Sets the new value for a field in the mutation. This will overwrite any
     /// previous mutation for the same field.
-    pub fn set<TField: EntField<Ent = TEnt>>(&mut self, new_value: TField::Value) {
+    pub fn set<TField: EntField<Ent = TEnt>>(mut self, new_value: TField::Value) -> Self {
         let expr = new_value.clone().into();
         self.field_mutations
             .insert(TField::NAME.to_string(), (Box::new(new_value), expr));
+        self
     }
 
     /// Unsets the value for a field in the mutation, effectively removing any
     /// previous mutation for that field.
-    pub fn unset<TField: EntField<Ent = TEnt>>(&mut self) {
+    pub fn unset<TField: EntField<Ent = TEnt>>(mut self) -> Self {
         self.field_mutations.remove(TField::NAME);
+        self
     }
 
     /// Applies the mutation by checking privacy policies, generating and executing the update statement, and reloading
