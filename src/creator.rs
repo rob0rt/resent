@@ -8,8 +8,6 @@ use thiserror::Error;
 pub enum EntCreatorError {
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
-    #[error("Query error: {0}")]
-    EntLoadError(#[from] sea_query::error::Error),
 }
 
 pub struct EntCreator<TEnt: Ent> {
@@ -42,7 +40,7 @@ impl<TEnt: Ent> EntCreator<TEnt> {
         self
     }
 
-    /// Applies the mutation by checking privacy policies, generating and executing the update statement, and reloading
+    /// Applies the mutation by checking privacy policies, generating and executing the insert statement, and reloading
     /// the updated entity.
     pub async fn apply<'ctx, Ctx: 'ctx + Sync>(
         self,
@@ -51,12 +49,11 @@ impl<TEnt: Ent> EntCreator<TEnt> {
     where
         TEnt: EntPrivacyPolicy<'ctx, Ctx>,
     {
-        // Generate and execute the update statement
-        let update_stmt: Result<sea_query::InsertStatement, sea_query::error::Error> = self.into();
-        let update_stmt = update_stmt?;
-        let (sql, args) = update_stmt.build_sqlx(sea_query::PostgresQueryBuilder);
+        // Generate and execute the insert statement
+        let insert_statement: sea_query::InsertStatement = self.into();
+        let (sql, args) = insert_statement.build_sqlx(sea_query::PostgresQueryBuilder);
 
-        // Execute the update
+        // Execute the insert
         let query_result = sqlx::query_with(&sql, args)
             .fetch_one(&ctx.conn)
             .await
@@ -66,9 +63,7 @@ impl<TEnt: Ent> EntCreator<TEnt> {
     }
 }
 
-impl<TEnt: Ent> From<EntCreator<TEnt>>
-    for Result<sea_query::InsertStatement, sea_query::error::Error>
-{
+impl<TEnt: Ent> From<EntCreator<TEnt>> for sea_query::InsertStatement {
     fn from(val: EntCreator<TEnt>) -> Self {
         let (columns, values): (Vec<_>, Vec<_>) = val
             .field_mutations
@@ -76,11 +71,11 @@ impl<TEnt: Ent> From<EntCreator<TEnt>>
             .map(|(field_name, (_, expr))| (field_name, expr))
             .unzip();
 
-        Ok(Query::insert()
+        Query::insert()
             .into_table(TEnt::TABLE_NAME)
             .columns(columns)
-            .values(values)?
+            .values_panic(values)
             .returning_all()
-            .to_owned())
+            .to_owned()
     }
 }
