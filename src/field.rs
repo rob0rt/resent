@@ -9,7 +9,7 @@ impl FieldVisibility for ReadWrite {}
 
 pub trait EntField: Sized {
     const NAME: &'static str;
-    type Value: Into<Expr> + Clone + Send + 'static;
+    type Value: Into<Expr> + Clone + Sync + Send + 'static;
     type Ent: Ent;
     type Visibility: FieldVisibility;
 

@@ -13,7 +13,7 @@ pub enum EntCreatorError {
 }
 
 pub struct EntCreator<TEnt: Ent> {
-    field_mutations: HashMap<String, (Box<dyn std::any::Any>, Expr)>,
+    field_mutations: HashMap<String, (Box<dyn std::any::Any + Sync + Send>, Expr)>,
 
     _marker: std::marker::PhantomData<TEnt>,
 }
