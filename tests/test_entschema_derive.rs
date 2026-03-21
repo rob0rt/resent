@@ -1,5 +1,5 @@
 use resent::{
-    Ent, EntEdge, EntSchema,
+    Ent, EntEdge, EntOptionalEdge, EntSchema,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
     query::{Order, predicate::QueryPredicate as P},
 };
@@ -52,6 +52,8 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBar {
 pub struct EntBaz {
     #[field(primary_key)]
     id: Uuid,
+
+    foo_id: Option<Uuid>,
 }
 
 impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBaz {
@@ -66,6 +68,10 @@ impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBaz {
 
 impl EntEdge for ent_baz::Id {
     type TargetField = ent_bar::Id;
+}
+
+impl EntOptionalEdge for ent_baz::FooId {
+    type TargetField = ent_foo::Id;
 }
 
 // #[sqlx::test]

@@ -111,6 +111,46 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
             <TEdge::TargetField as EntField>::get_value(self).clone(),
         ))
     }
+
+    /// Load a related entity via an optional edge. Returns `Ok(None)` if the edge field is `None`.
+    fn load_optional_edge<'ctx, TEdge: EntOptionalEdge<Ent = Self>, Ctx: 'ctx + Sync>(
+        &self,
+        context: &'ctx QueryContext<Ctx>,
+    ) -> impl std::future::Future<
+        Output = Result<Option<<TEdge::TargetField as EntField>::Ent>, EntLoadOnlyError>,
+    > + Send
+    where
+        <TEdge::TargetField as EntField>::Ent: EntPrivacyPolicy<'ctx, Ctx>,
+    {
+        let query = self.query_optional_edge::<TEdge>();
+        async move {
+            match query {
+                None => Ok(None),
+                Some(q) => q.only(context).await.map(Some),
+            }
+        }
+    }
+
+    /// Create an `EntQuery` for an optional edge. Returns `None` if the edge field value is `None`.
+    fn query_optional_edge<TEdge: EntOptionalEdge<Ent = Self>>(
+        &self,
+    ) -> Option<EntQuery<<TEdge::TargetField as EntField>::Ent>> {
+        TEdge::get_value(self).as_ref().map(|v| {
+            EntQuery::<<TEdge::TargetField as EntField>::Ent>::new()
+                .where_field::<TEdge::TargetField>(P::equals(v.clone()))
+        })
+    }
+
+    /// Create an `EntQuery` for an inbound optional edge reference (finds entities whose optional
+    /// FK field references `self`).
+    fn query_optional_edge_ref<TEdge: EntOptionalEdge>(&self) -> EntQuery<TEdge::Ent>
+    where
+        TEdge::TargetField: EntField<Ent = Self>,
+    {
+        EntQuery::<TEdge::Ent>::new().where_field::<TEdge>(P::equals(Some(
+            <TEdge::TargetField as EntField>::get_value(self).clone(),
+        )))
+    }
 }
 
 pub trait EntEdge
@@ -118,4 +158,11 @@ where
     Self: EntField,
 {
     type TargetField: EntField<Value = Self::Value>;
+}
+
+pub trait EntOptionalEdge
+where
+    Self: EntField<Value = Option<<Self::TargetField as EntField>::Value>>,
+{
+    type TargetField: EntField;
 }

@@ -1,5 +1,5 @@
 use crate::{
-    Ent, EntEdge,
+    Ent, EntEdge, EntOptionalEdge,
     field::EntField,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
     query::{
@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use futures_util::StreamExt;
-use sea_query::Order;
+use sea_query::{Expr, ExprTrait, Order};
 use sea_query_sqlx::SqlxBinder;
 
 impl<TEnt: Ent> EntQuery<TEnt> {
@@ -64,6 +64,62 @@ impl<TEnt: Ent> EntQuery<TEnt> {
         } else {
             // Optimization: if the current query has no filters, joins, or limits, we can skip the subquery and just
             // query directly on the edge table
+            vec![]
+        };
+        EntQuery {
+            filters,
+            joins: Vec::new(),
+            limit: None,
+            order: None,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Query an outbound optional edge (where the FK field may be `None`)
+    pub fn query_optional_edge<TEdge: EntOptionalEdge<Ent = TEnt>>(
+        self,
+    ) -> EntQuery<<TEdge::TargetField as EntField>::Ent> {
+        let filters = if !self.filters.is_empty() || self.limit.is_some() || !self.joins.is_empty()
+        {
+            // Build: target_col IN (SELECT source.optional_fk FROM source WHERE ...)
+            let mut subquery: sea_query::SelectStatement = self.select::<TEdge>().into();
+            subquery
+                .clear_selects()
+                .column((TEnt::TABLE_NAME, TEdge::NAME));
+            vec![
+                Expr::col((
+                    <TEdge::TargetField as EntField>::Ent::TABLE_NAME,
+                    <TEdge::TargetField as EntField>::NAME,
+                ))
+                .in_subquery(subquery),
+            ]
+        } else {
+            vec![]
+        };
+        EntQuery {
+            filters,
+            joins: Vec::new(),
+            limit: None,
+            order: None,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Query an inbound optional edge (finding entities whose optional FK references `TEnt`)
+    pub fn query_optional_edge_ref<TEdge: EntOptionalEdge>(self) -> EntQuery<TEdge::Ent>
+    where
+        TEdge::TargetField: EntField<Ent = TEnt>,
+    {
+        let filters = if !self.filters.is_empty() || self.limit.is_some() || !self.joins.is_empty()
+        {
+            // Build: source.optional_fk IN (SELECT target_col FROM target WHERE ...)
+            let mut subquery: sea_query::SelectStatement =
+                self.select::<TEdge::TargetField>().into();
+            subquery
+                .clear_selects()
+                .column((TEnt::TABLE_NAME, <TEdge::TargetField as EntField>::NAME));
+            vec![Expr::col((TEdge::Ent::TABLE_NAME, TEdge::NAME)).in_subquery(subquery)]
+        } else {
             vec![]
         };
         EntQuery {
