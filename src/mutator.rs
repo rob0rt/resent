@@ -1,9 +1,10 @@
 use crate::{
     Ent,
+    context::EntContext,
     field::{EntField, ReadWrite},
     primary_key::EntPrimaryKey,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
-    query::{EntLoadOnlyError, QueryContext},
+    query::EntLoadOnlyError,
 };
 use sea_query::{Expr, Query};
 use sea_query_sqlx::SqlxBinder;
@@ -86,12 +87,9 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
 
     /// Applies the mutation by checking privacy policies, generating and executing the update statement, and reloading
     /// the updated entity.
-    pub async fn apply<'ctx, Ctx: 'ctx + Sync>(
-        self,
-        ctx: &'ctx QueryContext<Ctx>,
-    ) -> Result<TEnt, EntMutationError>
+    pub async fn apply<TCtx: EntContext>(self, ctx: &TCtx) -> Result<TEnt, EntMutationError>
     where
-        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEnt: EntPrivacyPolicy<TCtx>,
     {
         // Get the primary key value of the entity being mutated - we'll need this to reload the entity after the
         // mutation is applied.
@@ -113,7 +111,7 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
 
         // Execute the update
         sqlx::query_with(&sql, args)
-            .execute(&ctx.conn)
+            .execute(ctx.conn())
             .await
             .map_err(EntMutationError::from)?;
 

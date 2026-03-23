@@ -1,3 +1,4 @@
+pub mod context;
 pub mod creator;
 pub mod field;
 pub mod mutator;
@@ -7,12 +8,15 @@ pub mod query;
 
 pub use resent_macros::EntSchema;
 
-use creator::EntCreator;
-use field::EntField;
-use mutator::EntMutator;
-use primary_key::EntPrimaryKey;
-use privacy::EntPrivacyPolicy;
-use query::{EntLoadOnlyError, EntQuery, QueryContext, predicate::QueryPredicate as P};
+use crate::{
+    context::EntContext,
+    creator::EntCreator,
+    field::EntField,
+    mutator::EntMutator,
+    primary_key::EntPrimaryKey,
+    privacy::EntPrivacyPolicy,
+    query::{EntLoadOnlyError, EntQuery, predicate::QueryPredicate as P},
+};
 use sea_query::DeleteStatement;
 use sea_query_sqlx::SqlxBinder;
 use thiserror::Error;
@@ -36,12 +40,12 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
         EntCreator::new()
     }
 
-    fn load<'ctx, Ctx: 'ctx + Sync>(
-        context: &'ctx QueryContext<Ctx>,
+    fn load<TCtx: EntContext>(
+        context: &TCtx,
         primary_key: <Self::PrimaryKey as EntPrimaryKey<Self>>::Value,
     ) -> impl std::future::Future<Output = Result<Self, EntLoadOnlyError>> + Send
     where
-        Self: EntPrivacyPolicy<'ctx, Ctx>,
+        Self: EntPrivacyPolicy<TCtx>,
     {
         async {
             Self::query()
@@ -52,12 +56,12 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
     }
 
     /// Delete this entity from the database.
-    fn delete<'ctx, Ctx: 'ctx + Sync>(
+    fn delete<TCtx: EntContext>(
         self,
-        context: &'ctx QueryContext<Ctx>,
+        context: &TCtx,
     ) -> impl std::future::Future<Output = Result<(), EntDeletionError>> + Send
     where
-        Self: EntPrivacyPolicy<'ctx, Ctx>,
+        Self: EntPrivacyPolicy<TCtx>,
     {
         async move {
             let primary_key = Self::PrimaryKey::get_value(&self);
@@ -68,7 +72,7 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
                 .build_sqlx(sea_query::PostgresQueryBuilder);
 
             sqlx::query_with(&sql, values)
-                .execute(&context.conn)
+                .execute(context.conn())
                 .await?;
 
             Ok(())
@@ -81,14 +85,14 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
     }
 
     /// Load a related entity via an edge.
-    fn load_edge<'ctx, TEdge: EntEdge<Ent = Self>, Ctx: 'ctx + Sync>(
+    fn load_edge<TEdge: EntEdge<Ent = Self>, TCtx: EntContext>(
         &self,
-        context: &'ctx QueryContext<Ctx>,
+        context: &TCtx,
     ) -> impl std::future::Future<
         Output = Result<<TEdge::TargetField as EntField>::Ent, EntLoadOnlyError>,
     > + Send
     where
-        <TEdge::TargetField as EntField>::Ent: EntPrivacyPolicy<'ctx, Ctx>,
+        <TEdge::TargetField as EntField>::Ent: EntPrivacyPolicy<TCtx>,
     {
         self.query_edge::<TEdge>().only(context)
     }
@@ -113,14 +117,14 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
     }
 
     /// Load a related entity via an optional edge. Returns `Ok(None)` if the edge field is `None`.
-    fn load_optional_edge<'ctx, TEdge: EntOptionalEdge<Ent = Self>, Ctx: 'ctx + Sync>(
+    fn load_optional_edge<TEdge: EntOptionalEdge<Ent = Self>, TCtx: EntContext>(
         &self,
-        context: &'ctx QueryContext<Ctx>,
+        context: &TCtx,
     ) -> impl std::future::Future<
         Output = Result<Option<<TEdge::TargetField as EntField>::Ent>, EntLoadOnlyError>,
     > + Send
     where
-        <TEdge::TargetField as EntField>::Ent: EntPrivacyPolicy<'ctx, Ctx>,
+        <TEdge::TargetField as EntField>::Ent: EntPrivacyPolicy<TCtx>,
     {
         let query = self.query_optional_edge::<TEdge>();
         async move {

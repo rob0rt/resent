@@ -1,4 +1,4 @@
-use crate::{Ent, field::EntField, privacy::EntPrivacyPolicy, query::QueryContext};
+use crate::{Ent, EntContext, field::EntField, privacy::EntPrivacyPolicy};
 use sea_query::{Expr, Query};
 use sea_query_sqlx::SqlxBinder;
 use std::collections::HashMap;
@@ -42,12 +42,9 @@ impl<TEnt: Ent> EntCreator<TEnt> {
 
     /// Applies the mutation by checking privacy policies, generating and executing the insert statement, and reloading
     /// the updated entity.
-    pub async fn apply<'ctx, Ctx: 'ctx + Sync>(
-        self,
-        ctx: &'ctx QueryContext<Ctx>,
-    ) -> Result<TEnt, EntCreatorError>
+    pub async fn apply<TCtx: EntContext>(self, ctx: &TCtx) -> Result<TEnt, EntCreatorError>
     where
-        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEnt: EntPrivacyPolicy<TCtx>,
     {
         // Generate and execute the insert statement
         let insert_statement: sea_query::InsertStatement = self.into();
@@ -55,7 +52,7 @@ impl<TEnt: Ent> EntCreator<TEnt> {
 
         // Execute the insert
         let query_result = sqlx::query_with(&sql, args)
-            .fetch_one(&ctx.conn)
+            .fetch_one(ctx.conn())
             .await
             .map_err(EntCreatorError::from)?;
 

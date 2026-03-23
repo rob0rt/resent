@@ -1,9 +1,10 @@
 use crate::{
     Ent, EntEdge, EntOptionalEdge,
+    context::EntContext,
     field::EntField,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
     query::{
-        EntLoadError, EntLoadOnlyError, EntQuery, JoinDef, QueryContext,
+        EntLoadError, EntLoadOnlyError, EntQuery, JoinDef,
         edges::EntWithEdges,
         predicate::{FieldPredicate, QueryPredicate},
         projection::EntFieldProjection,
@@ -168,19 +169,16 @@ impl<TEnt: Ent> EntQuery<TEnt> {
     }
 
     /// Loads entities matching the query, applying privacy policies to filter results as needed.
-    pub async fn load<'ctx, Ctx: 'ctx + Sync>(
-        self,
-        ctx: &'ctx QueryContext<Ctx>,
-    ) -> Result<Vec<TEnt>, EntLoadError>
+    pub async fn load<TCtx: EntContext>(self, ctx: &TCtx) -> Result<Vec<TEnt>, EntLoadError>
     where
-        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEnt: EntPrivacyPolicy<TCtx>,
     {
         let query_policy = TEnt::query_policy();
 
         let limit = self.limit;
         let mut select: sea_query::SelectStatement = self.into();
 
-        let conn = &ctx.conn;
+        let conn = ctx.conn();
 
         let mut results = Vec::new();
         let mut offset = 0;
@@ -247,12 +245,9 @@ impl<TEnt: Ent> EntQuery<TEnt> {
     }
 
     /// Loads a single entity, returning an error if there are zero or more than one results.
-    pub async fn only<'ctx, Ctx: 'ctx + Sync>(
-        self,
-        ctx: &'ctx QueryContext<Ctx>,
-    ) -> Result<TEnt, EntLoadOnlyError>
+    pub async fn only<TCtx: EntContext>(self, ctx: &TCtx) -> Result<TEnt, EntLoadOnlyError>
     where
-        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEnt: EntPrivacyPolicy<TCtx>,
     {
         let mut results = self.limit(2).load(ctx).await?;
         match results.len() {
@@ -264,12 +259,9 @@ impl<TEnt: Ent> EntQuery<TEnt> {
 
     /// Loads the first result, returning None if there are no results. Will not return an error if there are multiple
     /// results.
-    pub async fn first<'ctx, Ctx: 'ctx + Sync>(
-        self,
-        ctx: &'ctx QueryContext<Ctx>,
-    ) -> Result<Option<TEnt>, EntLoadError>
+    pub async fn first<TCtx: EntContext>(self, ctx: &TCtx) -> Result<Option<TEnt>, EntLoadError>
     where
-        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEnt: EntPrivacyPolicy<TCtx>,
     {
         let mut results = self.limit(1).load(ctx).await?;
         Ok(results.pop())

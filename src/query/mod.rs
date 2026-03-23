@@ -30,25 +30,6 @@ pub enum EntLoadOnlyError {
     TooManyResults,
 }
 
-#[derive(Clone)]
-pub struct QueryContext<T> {
-    pub(crate) conn: sqlx::PgPool,
-    pub data: T,
-}
-
-impl<T> QueryContext<T> {
-    pub fn new(conn: sqlx::PgPool, data: T) -> Self {
-        Self { conn, data }
-    }
-
-    pub fn with<R>(&self, data: R) -> QueryContext<R> {
-        QueryContext {
-            conn: self.conn.clone(),
-            data,
-        }
-    }
-}
-
 struct JoinDef {
     table: &'static str,
     left_table: &'static str,

@@ -4,11 +4,10 @@ use sqlx::postgres::PgRow;
 
 use crate::{
     Ent, EntEdge,
+    context::EntContext,
     field::EntField,
     privacy::EntPrivacyPolicy,
-    query::{
-        EntLoadError, EntLoadOnlyError, EntQuery, JoinDef, QueryContext, predicate::FieldPredicate,
-    },
+    query::{EntLoadError, EntLoadOnlyError, EntQuery, JoinDef, predicate::FieldPredicate},
 };
 
 pub struct EntWithEdges<E: Ent, Edges> {
@@ -90,18 +89,18 @@ impl<TEnt: Ent, TEdges: EdgeList> EntQuery<EntWithEdges<TEnt, TEdges>> {
         }
     }
 
-    pub async fn load<'ctx, Ctx: 'ctx + Sync>(
+    pub async fn load<TCtx: EntContext>(
         self,
-        ctx: &'ctx QueryContext<Ctx>,
+        ctx: &TCtx,
     ) -> Result<Vec<EntWithEdges<TEnt, TEdges>>, EntLoadError>
     where
-        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEnt: EntPrivacyPolicy<TCtx>,
         TEdges: EdgeList,
     {
         let select: sea_query::SelectStatement = self.into();
         let (sql, values) = select.build_sqlx(sea_query::PostgresQueryBuilder);
         let rows = sqlx::query_with(&sql, values)
-            .fetch_all(&ctx.conn)
+            .fetch_all(ctx.conn())
             .await
             .map_err(EntLoadError::DatabaseError)?;
 
@@ -114,12 +113,12 @@ impl<TEnt: Ent, TEdges: EdgeList> EntQuery<EntWithEdges<TEnt, TEdges>> {
         Ok(results)
     }
 
-    pub async fn only<'ctx, Ctx: 'ctx + Sync>(
+    pub async fn only<TCtx: EntContext>(
         self,
-        ctx: &'ctx QueryContext<Ctx>,
+        ctx: &TCtx,
     ) -> Result<EntWithEdges<TEnt, TEdges>, EntLoadOnlyError>
     where
-        TEnt: EntPrivacyPolicy<'ctx, Ctx>,
+        TEnt: EntPrivacyPolicy<TCtx>,
         TEdges: EdgeList,
     {
         let mut results = self.limit(2).load(ctx).await?;

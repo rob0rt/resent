@@ -1,11 +1,17 @@
 use resent::{
     Ent, EntEdge, EntOptionalEdge, EntSchema,
+    context::EntContext,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
     query::{Order, predicate::QueryPredicate as P},
 };
 use uuid::Uuid;
 
-type EntCtx = ();
+struct Context;
+impl EntContext for Context {
+    fn conn(&self) -> &sqlx::PgPool {
+        unimplemented!()
+    }
+}
 
 #[derive(EntSchema)]
 #[entschema(table = "foo")]
@@ -17,12 +23,12 @@ pub struct EntFoo {
     bar_id: Uuid,
 }
 
-impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntFoo {
-    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, EntCtx, Self>>> {
+impl EntPrivacyPolicy<Context> for EntFoo {
+    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<Self, Context>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 
-    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, EntCtx, Self>>> {
+    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<Self, Context>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 }
@@ -36,12 +42,12 @@ pub struct EntBar {
     value: String,
 }
 
-impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBar {
-    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, EntCtx, Self>>> {
+impl EntPrivacyPolicy<Context> for EntBar {
+    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<Self, Context>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 
-    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, EntCtx, Self>>> {
+    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<Self, Context>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 }
@@ -56,12 +62,12 @@ pub struct EntBaz {
     foo_id: Option<Uuid>,
 }
 
-impl<'ctx> EntPrivacyPolicy<'ctx, EntCtx> for EntBaz {
-    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<'ctx, EntCtx, Self>>> {
+impl EntPrivacyPolicy<Context> for EntBaz {
+    fn query_policy() -> Vec<Box<dyn EntQueryPrivacyRule<Self, Context>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 
-    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<'ctx, EntCtx, Self>>> {
+    fn mutation_policy() -> Vec<Box<dyn EntMutationPrivacyRule<Self, Context>>> {
         vec![Box::new(AlwaysAllowRule)]
     }
 }
