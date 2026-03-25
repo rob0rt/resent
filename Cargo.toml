@@ -21,6 +21,7 @@ sea-query-sqlx = { version = "0.8.0-rc.14", features = [
     "with-json",
 ] }
 thiserror = "2.0.18"
+tracing = "0.1.44"
 
 
 [dev-dependencies]

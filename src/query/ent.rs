@@ -169,6 +169,7 @@ impl<TEnt: Ent> EntQuery<TEnt> {
     }
 
     /// Loads entities matching the query, applying privacy policies to filter results as needed.
+    #[tracing::instrument(skip_all, name = "EntQuery::load")]
     pub async fn load<TCtx: EntContext>(self, ctx: &TCtx) -> Result<Vec<TEnt>, EntLoadError>
     where
         TEnt: EntPrivacyPolicy<TCtx>,
@@ -184,6 +185,7 @@ impl<TEnt: Ent> EntQuery<TEnt> {
         let mut offset = 0;
         'query: loop {
             let (sql, values) = select.build_sqlx(sea_query::PostgresQueryBuilder);
+            tracing::debug!("Executing query: {}", sql);
             let mut rows = sqlx::query_with(&sql, values).fetch(conn);
 
             // Evaluate privacy policies for each result, and only include results that pass.
@@ -245,6 +247,7 @@ impl<TEnt: Ent> EntQuery<TEnt> {
     }
 
     /// Loads a single entity, returning an error if there are zero or more than one results.
+    #[tracing::instrument(skip_all, name = "EntQuery::only")]
     pub async fn only<TCtx: EntContext>(self, ctx: &TCtx) -> Result<TEnt, EntLoadOnlyError>
     where
         TEnt: EntPrivacyPolicy<TCtx>,
@@ -259,6 +262,7 @@ impl<TEnt: Ent> EntQuery<TEnt> {
 
     /// Loads the first result, returning None if there are no results. Will not return an error if there are multiple
     /// results.
+    #[tracing::instrument(skip_all, name = "EntQuery::first")]
     pub async fn first<TCtx: EntContext>(self, ctx: &TCtx) -> Result<Option<TEnt>, EntLoadError>
     where
         TEnt: EntPrivacyPolicy<TCtx>,

@@ -30,6 +30,7 @@ pub enum EntLoadOnlyError {
     TooManyResults,
 }
 
+#[derive(Debug)]
 struct JoinDef {
     table: &'static str,
     left_table: &'static str,
@@ -38,6 +39,7 @@ struct JoinDef {
     right_col: &'static str,
 }
 
+#[derive(Debug)]
 pub struct EntQuery<TOut> {
     filters: Vec<Expr>,
     joins: Vec<JoinDef>,
