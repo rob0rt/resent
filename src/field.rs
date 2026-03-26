@@ -1,6 +1,5 @@
 use crate::Ent;
 use sea_query::Expr;
-use std::hash::Hash;
 
 pub trait FieldVisibility {}
 pub struct ReadOnly;
@@ -10,7 +9,7 @@ impl FieldVisibility for ReadWrite {}
 
 pub trait EntField: Sized {
     const NAME: &'static str;
-    type Value: Into<Expr> + Clone + Sync + Send + Hash + Eq + 'static;
+    type Value: Into<Expr> + Clone + Sync + Send + 'static;
     type Ent: Ent;
     type Visibility: FieldVisibility;
 

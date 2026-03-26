@@ -10,7 +10,10 @@ pub trait EntPrimaryKey<TEnt: Ent> {
     fn as_expr(value: Self::Value) -> Expr;
 }
 
-impl<TEnt: Ent, TField: EntField<Ent = TEnt>> EntPrimaryKey<TEnt> for TField {
+impl<TEnt: Ent, TField: EntField<Ent = TEnt>> EntPrimaryKey<TEnt> for TField
+where
+    TField::Value: Hash + Eq,
+{
     type Value = TField::Value;
 
     fn get_value(ent: &TEnt) -> Self::Value {
@@ -22,8 +25,10 @@ impl<TEnt: Ent, TField: EntField<Ent = TEnt>> EntPrimaryKey<TEnt> for TField {
     }
 }
 
-impl<TEnt: Ent, T1: EntField<Ent = TEnt>, T2: EntField<Ent = TEnt>> EntPrimaryKey<TEnt>
-    for (T1, T2)
+impl<TEnt: Ent, T1: EntField<Ent = TEnt>, T2: EntField<Ent = TEnt>> EntPrimaryKey<TEnt> for (T1, T2)
+where
+    T1::Value: Hash + Eq,
+    T2::Value: Hash + Eq,
 {
     type Value = (T1::Value, T2::Value);
 
@@ -40,6 +45,10 @@ impl<TEnt: Ent, T1: EntField<Ent = TEnt>, T2: EntField<Ent = TEnt>> EntPrimaryKe
 
 impl<TEnt: Ent, T1: EntField<Ent = TEnt>, T2: EntField<Ent = TEnt>, T3: EntField<Ent = TEnt>>
     EntPrimaryKey<TEnt> for (T1, T2, T3)
+where
+    T1::Value: Hash + Eq,
+    T2::Value: Hash + Eq,
+    T3::Value: Hash + Eq,
 {
     type Value = (T1::Value, T2::Value, T3::Value);
 
