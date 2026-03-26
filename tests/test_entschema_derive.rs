@@ -11,14 +11,6 @@ struct Context {
     cache: EntCache,
 }
 
-impl Context {
-    fn new() -> Self {
-        Self {
-            cache: EntCache::default(),
-        }
-    }
-}
-
 impl EntContext for Context {
     fn conn(&self) -> &sqlx::PgPool {
         unimplemented!()
