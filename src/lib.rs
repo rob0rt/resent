@@ -101,7 +101,7 @@ pub trait Ent:
         EntMutator::new(self)
     }
 
-    /// Load a related entity via an edge.
+    /// Load a related entity via an edge, using the target entity's cache.
     fn load_edge<TEdge: EntEdge<Ent = Self>, TCtx: EntContext>(
         &self,
         ctx: &TCtx,
@@ -109,9 +109,11 @@ pub trait Ent:
         Output = Result<<TEdge::TargetField as EntField>::Ent, EntLoadOnlyError>,
     > + Send
     where
-        <TEdge::TargetField as EntField>::Ent: EntPrivacyPolicy<TCtx>,
+        TEdge::Value: std::hash::Hash + Eq,
+        <TEdge::TargetField as EntField>::Ent:
+            EntPrivacyPolicy<TCtx> + Ent<PrimaryKey = TEdge::TargetField>,
     {
-        self.query_edge::<TEdge>().only(ctx)
+        <TEdge::TargetField as EntField>::Ent::load(ctx, TEdge::get_value(self).clone())
     }
 
     /// Create an EntQuery for an edge, but don't execute it - this is useful for building up more complex queries that
