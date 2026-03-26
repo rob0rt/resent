@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod context;
 pub mod creator;
 pub mod field;
@@ -14,7 +15,7 @@ use crate::{
     field::EntField,
     mutator::EntMutator,
     primary_key::EntPrimaryKey,
-    privacy::EntPrivacyPolicy,
+    privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
     query::{EntLoadOnlyError, EntQuery, predicate::QueryPredicate as P},
 };
 use sea_query::DeleteStatement;
@@ -27,7 +28,9 @@ pub enum EntDeletionError {
     QueryError(#[from] sqlx::Error),
 }
 
-pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
+pub trait Ent:
+    Send + Sync + Sized + Clone + 'static + for<'a> From<&'a sqlx::postgres::PgRow>
+{
     const TABLE_NAME: &'static str;
     type PrimaryKey: EntPrimaryKey<Self>;
 
@@ -45,9 +48,23 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
         primary_key: <Self::PrimaryKey as EntPrimaryKey<Self>>::Value,
     ) -> impl std::future::Future<Output = Result<Self, EntLoadOnlyError>> + Send
     where
-        Self: EntPrivacyPolicy<TCtx>,
+        Self: EntPrivacyPolicy<TCtx> + 'static,
     {
         async {
+            // Check cache first
+            if let Some(cached) = context.cache().get::<Self>(&primary_key) {
+                let policies = Self::query_policy();
+                for policy in &policies {
+                    match policy.evaluation(context, &cached).await {
+                        PrivacyRuleOutcome::Allow => return Ok(cached),
+                        PrivacyRuleOutcome::Deny => return Err(EntLoadOnlyError::NoResults),
+                        PrivacyRuleOutcome::Skip => continue,
+                    }
+                }
+                return Err(EntLoadOnlyError::NoResults);
+            }
+
+            // Cache miss
             Self::query()
                 .where_expr(Self::PrimaryKey::as_expr(primary_key))
                 .only(context)
@@ -61,19 +78,21 @@ pub trait Ent: Send + Sized + for<'a> From<&'a sqlx::postgres::PgRow> {
         context: &TCtx,
     ) -> impl std::future::Future<Output = Result<(), EntDeletionError>> + Send
     where
-        Self: EntPrivacyPolicy<TCtx>,
+        Self: EntPrivacyPolicy<TCtx> + 'static,
     {
         async move {
             let primary_key = Self::PrimaryKey::get_value(&self);
 
             let (sql, values) = DeleteStatement::new()
                 .from_table(Self::TABLE_NAME)
-                .cond_where(Self::PrimaryKey::as_expr(primary_key))
+                .cond_where(Self::PrimaryKey::as_expr(primary_key.clone()))
                 .build_sqlx(sea_query::PostgresQueryBuilder);
 
             sqlx::query_with(&sql, values)
                 .execute(context.conn())
                 .await?;
+
+            context.cache().invalidate::<Self>(&primary_key);
 
             Ok(())
         }

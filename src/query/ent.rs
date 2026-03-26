@@ -2,6 +2,7 @@ use crate::{
     Ent, EntEdge, EntOptionalEdge,
     context::EntContext,
     field::EntField,
+    primary_key::EntPrimaryKey,
     privacy::{EntPrivacyPolicy, PrivacyRuleOutcome},
     query::{
         EntLoadError, EntLoadOnlyError, EntQuery, JoinDef,
@@ -196,6 +197,10 @@ impl<TEnt: Ent> EntQuery<TEnt> {
                 let ent = row
                     .map(|r| TEnt::from(&r))
                     .map_err(EntLoadError::DatabaseError)?;
+
+                // Cache the loaded entity before evaluating privacy
+                ctx.cache()
+                    .insert::<TEnt>(TEnt::PrimaryKey::get_value(&ent), ent.clone());
 
                 'rules: for rule in &query_policy {
                     match rule.evaluation(ctx, &ent).await {

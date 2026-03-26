@@ -1,9 +1,9 @@
-use sea_query::{Expr, ExprTrait};
-
 use crate::{Ent, field::EntField};
+use sea_query::{Expr, ExprTrait};
+use std::hash::Hash;
 
 pub trait EntPrimaryKey<TEnt: Ent> {
-    type Value: Send;
+    type Value: Send + Sync + Clone + Hash + Eq + 'static;
 
     fn get_value(ent: &TEnt) -> Self::Value;
 

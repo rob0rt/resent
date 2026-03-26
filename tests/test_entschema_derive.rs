@@ -1,19 +1,34 @@
 use resent::{
     Ent, EntEdge, EntOptionalEdge, EntSchema,
+    cache::EntCache,
     context::EntContext,
     privacy::{AlwaysAllowRule, EntMutationPrivacyRule, EntPrivacyPolicy, EntQueryPrivacyRule},
     query::{Order, predicate::QueryPredicate as P},
 };
 use uuid::Uuid;
 
-struct Context;
+struct Context {
+    cache: EntCache,
+}
+
+impl Context {
+    fn new() -> Self {
+        Self {
+            cache: EntCache::default(),
+        }
+    }
+}
+
 impl EntContext for Context {
     fn conn(&self) -> &sqlx::PgPool {
         unimplemented!()
     }
+    fn cache(&self) -> &EntCache {
+        &self.cache
+    }
 }
 
-#[derive(EntSchema)]
+#[derive(Clone, EntSchema)]
 #[entschema(table = "foo")]
 #[allow(dead_code)]
 pub struct EntFoo {
@@ -33,7 +48,7 @@ impl EntPrivacyPolicy<Context> for EntFoo {
     }
 }
 
-#[derive(EntSchema)]
+#[derive(Clone, EntSchema)]
 #[entschema(table = "bar")]
 #[allow(dead_code)]
 pub struct EntBar {
@@ -52,7 +67,7 @@ impl EntPrivacyPolicy<Context> for EntBar {
     }
 }
 
-#[derive(EntSchema)]
+#[derive(Clone, EntSchema)]
 #[entschema(table = "baz")]
 #[allow(dead_code)]
 pub struct EntBaz {

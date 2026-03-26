@@ -115,6 +115,9 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
             .await
             .map_err(EntMutationError::from)?;
 
+        // Invalidate cache before reloading
+        ctx.cache().invalidate::<TEnt>(&primary_key);
+
         // Reload and return the updated entity
         TEnt::load(ctx, primary_key)
             .await
@@ -145,7 +148,7 @@ mod tests {
 
     use super::*;
 
-    #[derive(resent::EntSchema)]
+    #[derive(Clone, resent::EntSchema)]
     #[entschema(table = "test_ent")]
     pub struct TestEnt {
         #[field(readonly, primary_key)]
