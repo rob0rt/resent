@@ -4,7 +4,7 @@ use std::sync::RwLock;
 
 use crate::{Ent, primary_key::EntPrimaryKey};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct EntCache {
     inner: RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>,
 }
