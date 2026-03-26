@@ -44,7 +44,7 @@ pub trait Ent:
     }
 
     fn load<TCtx: EntContext>(
-        context: &TCtx,
+        ctx: &TCtx,
         primary_key: <Self::PrimaryKey as EntPrimaryKey<Self>>::Value,
     ) -> impl std::future::Future<Output = Result<Self, EntLoadOnlyError>> + Send
     where
@@ -52,10 +52,10 @@ pub trait Ent:
     {
         async {
             // Check cache first
-            if let Some(cached) = context.cache().get::<Self>(&primary_key) {
+            if let Some(cached) = ctx.cache().get::<Self>(&primary_key).await {
                 let policies = Self::query_policy();
                 for policy in &policies {
-                    match policy.evaluation(context, &cached).await {
+                    match policy.evaluation(ctx, &cached).await {
                         PrivacyRuleOutcome::Allow => return Ok(cached),
                         PrivacyRuleOutcome::Deny => return Err(EntLoadOnlyError::NoResults),
                         PrivacyRuleOutcome::Skip => continue,
@@ -67,7 +67,7 @@ pub trait Ent:
             // Cache miss
             Self::query()
                 .where_expr(Self::PrimaryKey::as_expr(primary_key))
-                .only(context)
+                .only(ctx)
                 .await
         }
     }
@@ -75,7 +75,7 @@ pub trait Ent:
     /// Delete this entity from the database.
     fn delete<TCtx: EntContext>(
         self,
-        context: &TCtx,
+        ctx: &TCtx,
     ) -> impl std::future::Future<Output = Result<(), EntDeletionError>> + Send
     where
         Self: EntPrivacyPolicy<TCtx> + 'static,
@@ -88,11 +88,9 @@ pub trait Ent:
                 .cond_where(Self::PrimaryKey::as_expr(primary_key.clone()))
                 .build_sqlx(sea_query::PostgresQueryBuilder);
 
-            sqlx::query_with(&sql, values)
-                .execute(context.conn())
-                .await?;
+            sqlx::query_with(&sql, values).execute(ctx.conn()).await?;
 
-            context.cache().invalidate::<Self>(&primary_key);
+            ctx.cache().invalidate::<Self>(&primary_key).await;
 
             Ok(())
         }
@@ -106,14 +104,14 @@ pub trait Ent:
     /// Load a related entity via an edge.
     fn load_edge<TEdge: EntEdge<Ent = Self>, TCtx: EntContext>(
         &self,
-        context: &TCtx,
+        ctx: &TCtx,
     ) -> impl std::future::Future<
         Output = Result<<TEdge::TargetField as EntField>::Ent, EntLoadOnlyError>,
     > + Send
     where
         <TEdge::TargetField as EntField>::Ent: EntPrivacyPolicy<TCtx>,
     {
-        self.query_edge::<TEdge>().only(context)
+        self.query_edge::<TEdge>().only(ctx)
     }
 
     /// Create an EntQuery for an edge, but don't execute it - this is useful for building up more complex queries that
@@ -138,7 +136,7 @@ pub trait Ent:
     /// Load a related entity via an optional edge. Returns `Ok(None)` if the edge field is `None`.
     fn load_optional_edge<TEdge: EntOptionalEdge<Ent = Self>, TCtx: EntContext>(
         &self,
-        context: &TCtx,
+        ctx: &TCtx,
     ) -> impl std::future::Future<
         Output = Result<Option<<TEdge::TargetField as EntField>::Ent>, EntLoadOnlyError>,
     > + Send
@@ -149,7 +147,7 @@ pub trait Ent:
         async move {
             match query {
                 None => Ok(None),
-                Some(q) => q.only(context).await.map(Some),
+                Some(q) => q.only(ctx).await.map(Some),
             }
         }
     }

@@ -1,6 +1,9 @@
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::sync::RwLock;
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+};
+
+use tokio::sync::RwLock;
 
 use crate::{Ent, primary_key::EntPrimaryKey};
 
@@ -10,23 +13,23 @@ pub struct EntCache {
 }
 
 impl EntCache {
-    pub fn get<TEnt: Ent>(
+    pub async fn get<TEnt: Ent>(
         &self,
         pk: &<TEnt::PrimaryKey as EntPrimaryKey<TEnt>>::Value,
     ) -> Option<TEnt> {
-        let map = self.inner.read().unwrap();
+        let map = self.inner.read().await;
         let type_map = map.get(&TypeId::of::<TEnt>())?;
         let typed_map = type_map
             .downcast_ref::<HashMap<<TEnt::PrimaryKey as EntPrimaryKey<TEnt>>::Value, TEnt>>()?;
         typed_map.get(pk).cloned()
     }
 
-    pub fn insert<TEnt: Ent>(
+    pub async fn insert<TEnt: Ent>(
         &self,
         pk: <TEnt::PrimaryKey as EntPrimaryKey<TEnt>>::Value,
         ent: TEnt,
     ) {
-        let mut map = self.inner.write().unwrap();
+        let mut map = self.inner.write().await;
         let type_map = map.entry(TypeId::of::<TEnt>()).or_insert_with(|| {
             Box::new(HashMap::<
                 <TEnt::PrimaryKey as EntPrimaryKey<TEnt>>::Value,
@@ -39,8 +42,11 @@ impl EntCache {
         typed_map.insert(pk, ent);
     }
 
-    pub fn invalidate<TEnt: Ent>(&self, pk: &<TEnt::PrimaryKey as EntPrimaryKey<TEnt>>::Value) {
-        let mut map = self.inner.write().unwrap();
+    pub async fn invalidate<TEnt: Ent>(
+        &self,
+        pk: &<TEnt::PrimaryKey as EntPrimaryKey<TEnt>>::Value,
+    ) {
+        let mut map = self.inner.write().await;
         if let Some(type_map) = map.get_mut(&TypeId::of::<TEnt>())
             && let Some(typed_map) = type_map
                 .downcast_mut::<HashMap<<TEnt::PrimaryKey as EntPrimaryKey<TEnt>>::Value, TEnt>>()

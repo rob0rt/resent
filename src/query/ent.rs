@@ -200,7 +200,8 @@ impl<TEnt: Ent> EntQuery<TEnt> {
 
                 // Cache the loaded entity before evaluating privacy
                 ctx.cache()
-                    .insert::<TEnt>(TEnt::PrimaryKey::get_value(&ent), ent.clone());
+                    .insert::<TEnt>(TEnt::PrimaryKey::get_value(&ent), ent.clone())
+                    .await;
 
                 'rules: for rule in &query_policy {
                     match rule.evaluation(ctx, &ent).await {

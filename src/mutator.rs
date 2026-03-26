@@ -116,7 +116,7 @@ impl<'a, TEnt: Ent> EntMutator<'a, TEnt> {
             .map_err(EntMutationError::from)?;
 
         // Invalidate cache before reloading
-        ctx.cache().invalidate::<TEnt>(&primary_key);
+        ctx.cache().invalidate::<TEnt>(&primary_key).await;
 
         // Reload and return the updated entity
         TEnt::load(ctx, primary_key)
